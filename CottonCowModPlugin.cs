@@ -136,6 +136,8 @@ namespace CottonCowMod
             unlockMgr.RemoveUnlockString("RELATIONSHIPUNLOCK_CowUnlock_2");
             unlockMgr.RemoveUnlockString(CowTroughManager.TroughGivenUnlockString);
             unlockMgr.RemoveUnlockString("COTTONCOWMOD_TroughGiven"); // old system
+            unlockMgr.RemoveUnlockString("COTTONCOWMOD_NeedSpaceLetter_Farmer_Cotton");
+            unlockMgr.RemoveUnlockString("COTTONCOWMOD_NeedSpaceLetter_Young_Tom_Cotton");
 
             // Despawn active cows
             if (CowSpawner.Cow1Spawned)

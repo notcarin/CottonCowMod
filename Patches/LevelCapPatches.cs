@@ -18,7 +18,7 @@ namespace CottonCowMod.Patches
     public static class LevelCapPatches
     {
         internal const int NewMaxLevel = 11;
-        internal const int XpForLevel11 = 500;
+        internal const int XpForLevel11 = 150;
 
         internal static bool IsCottonNPC(string name)
         {

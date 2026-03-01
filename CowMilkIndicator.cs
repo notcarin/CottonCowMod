@@ -13,7 +13,7 @@ namespace CottonCowMod
     public class CowMilkIndicator : MonoBehaviour
     {
         private GameObject _indicator;
-        private float _baseHeight = 1.5f;
+        private float _baseHeight = 2.0f;
 
         void Start()
         {
@@ -109,7 +109,7 @@ namespace CottonCowMod
             // Gentle bob animation when visible
             if (_indicator == null || !_indicator.activeSelf) return;
 
-            float bob = Mathf.Sin(Time.time * 2f) * 0.15f;
+            float bob = Mathf.Sin(Time.time * 1.5f) * 0.05f;
             _indicator.transform.localPosition = new Vector3(0f, _baseHeight + bob, 0f);
         }
 

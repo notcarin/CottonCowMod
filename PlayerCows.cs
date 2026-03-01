@@ -257,6 +257,12 @@ namespace CottonCowMod
                 }
             }
 
+            // Send "need more space" letters when relationship is unlocked but garden isn't
+            if (_cow1RelationshipUnlocked && !_gardenArea5Unlocked)
+                CowMailSender.QueueNeedSpaceLetter("Farmer_Cotton");
+            if (_cow2RelationshipUnlocked && !_gardenArea5Unlocked)
+                CowMailSender.QueueNeedSpaceLetter("Young_Tom_Cotton");
+
             _cow1Active = newCow1;
             _cow2Active = newCow2;
 
