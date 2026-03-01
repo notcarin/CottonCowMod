@@ -123,8 +123,8 @@ namespace CottonCowMod
             Vector3 center = localBounds.center;
             Vector3 extents = localBounds.extents;
 
-            // Y: nestle down inside the trough (lower = deeper inside)
-            float slotY = center.y + extents.y * 0.1f;
+            // Y: rest near the bottom of the trough
+            float slotY = center.y - extents.y * 0.6f;
 
             // Long axis = whichever local extent is larger
             _longAxisIsX = extents.x >= extents.z;

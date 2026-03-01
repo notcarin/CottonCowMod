@@ -83,14 +83,10 @@ namespace CottonCowMod.Patches
             if (rightTip != null)
                 rightTip.SetActive(false);
 
-            // Override rejection text with cow diet description
-            var transferIcon = t.Field("m_TransferIcon").GetValue<object>();
-            if (transferIcon is Component transferIconComponent)
-            {
-                var overrider = __instance.gameObject
-                    .AddComponent<CowTroughRejectionTextOverride>();
-                overrider.Initialize(transferIconComponent.transform);
-            }
+            // Override rejection text with cow diet description.
+            // Component scans the entire UI hierarchy in LateUpdate for chicken
+            // trough rejection text and replaces it with our diet description.
+            __instance.gameObject.AddComponent<CowTroughRejectionTextOverride>();
         }
     }
 }
