@@ -14,7 +14,7 @@ namespace CottonCowMod
     {
         /// <summary>
         /// Creates a "need more space" letter from the given NPC when the player reaches
-        /// level 11 but doesn't have Garden Area 5 yet. Teases a gift without spoiling the cow.
+        /// level 13 but doesn't have Garden Area 5 yet. Teases a gift without spoiling the cow.
         /// Tracked via unlock string so it's only sent once per NPC.
         /// </summary>
         public static void QueueNeedSpaceLetter(string ownerNPC)

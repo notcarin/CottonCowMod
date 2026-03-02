@@ -51,22 +51,6 @@ namespace CottonCowMod
                 return;
             }
 
-            // Diagnostic logging for decoration/interaction system debugging
-            var placeable = hub.Placeable;
-            CottonCowModPlugin.Log.LogInfo(
-                $"CowTroughInteraction: Placeable={placeable != null}, " +
-                $"ItemComponent={hub.ItemComponent != null}, " +
-                $"Item={(hub.ItemComponent != null ? hub.ItemComponent.Item?.ToString() : "N/A")}");
-
-            var allColliders = GetComponentsInChildren<Collider>();
-            foreach (var col in allColliders)
-            {
-                var gc = col.GetComponent<GameCollider>();
-                CottonCowModPlugin.Log.LogInfo(
-                    $"CowTroughInteraction: Collider '{col.gameObject.name}' " +
-                    $"GameCollider={gc?.GetType().Name ?? "none"} trigger={col.isTrigger}");
-            }
-
             _interactable = hub.Interactable;
 
             // If the prefab lacks an Interactable component, create one at runtime

@@ -6,7 +6,7 @@ using TotS.Data;
 namespace CottonCowMod.Patches
 {
     /// <summary>
-    /// Extends the relationship level cap from 10 to 11 for Cotton family NPCs.
+    /// Extends the relationship level cap from 10 to 13 for Cotton family NPCs.
     ///
     /// Two-phase approach:
     /// 1. Prefix on SetupData() modifies the database BEFORE RelationshipData objects are created
@@ -17,8 +17,8 @@ namespace CottonCowMod.Patches
     [HarmonyPatch(typeof(RelationshipManager), "SetupData")]
     public static class LevelCapPatches
     {
-        internal const int NewMaxLevel = 11;
-        internal const int XpForLevel11 = 150;
+        internal const int NewMaxLevel = 13;
+        internal const int XpPerAddedLevel = 150;
 
         internal static bool IsCottonNPC(string name)
         {
@@ -51,7 +51,8 @@ namespace CottonCowMod.Patches
                 {
                     var extended = new int[NewMaxLevel];
                     Array.Copy(xpArray, extended, xpArray.Length);
-                    extended[NewMaxLevel - 1] = XpForLevel11;
+                    for (int i = xpArray.Length; i < NewMaxLevel; i++)
+                        extended[i] = XpPerAddedLevel;
                     Traverse.Create(entry).Field("m_XpRequiredToUnlockLevel").SetValue(extended);
                 }
 
@@ -92,21 +93,6 @@ namespace CottonCowMod.Patches
 
                 var ht = Traverse.Create(handler);
 
-                // Always log the XP thresholds for tuning (even if already patched)
-                var currentThresholds = ht.Field("LevelXpThresholds").GetValue<int[]>();
-                if (currentThresholds != null)
-                {
-                    var debugParts = new string[currentThresholds.Length];
-                    int cumul = 0;
-                    for (int i = 0; i < currentThresholds.Length; i++)
-                    {
-                        cumul += currentThresholds[i];
-                        debugParts[i] = $"L{i + 1}={currentThresholds[i]}(total:{cumul})";
-                    }
-                    CottonCowModPlugin.Log.LogInfo(
-                        $"LevelCapPatches: [{caller}] {kvp.Key} XP thresholds: [{string.Join(", ", debugParts)}]");
-                }
-
                 // Patch the readonly MaxLevel field if needed
                 if (data.MaxLevel < NewMaxLevel)
                     ht.Field("MaxLevel").SetValue(NewMaxLevel);
@@ -116,13 +102,14 @@ namespace CottonCowMod.Patches
                 if (thresholds != null)
                 {
                     bool needsUpdate = thresholds.Length < NewMaxLevel
-                        || thresholds[NewMaxLevel - 1] != XpForLevel11;
+                        || thresholds[NewMaxLevel - 1] != XpPerAddedLevel;
 
                     if (needsUpdate)
                     {
                         var extended = new int[NewMaxLevel];
                         Array.Copy(thresholds, extended, Math.Min(thresholds.Length, NewMaxLevel));
-                        extended[NewMaxLevel - 1] = XpForLevel11;
+                        for (int i = Math.Max(thresholds.Length, 10); i < NewMaxLevel; i++)
+                            extended[i] = XpPerAddedLevel;
                         ht.Field("LevelXpThresholds").SetValue(extended);
                     }
                 }
@@ -138,7 +125,7 @@ namespace CottonCowMod.Patches
                 }
 
                 CottonCowModPlugin.Log.LogInfo(
-                    $"LevelCapPatches: [{caller}] Patched {kvp.Key} -> MaxLevel={data.MaxLevel}, L11 XP={XpForLevel11}");
+                    $"LevelCapPatches: [{caller}] Patched {kvp.Key} -> MaxLevel={data.MaxLevel}, L11-L13 XP={XpPerAddedLevel} each");
             }
         }
     }

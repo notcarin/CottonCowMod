@@ -156,7 +156,6 @@ namespace CottonCowMod.Patches
                     var allTraits = Resources.FindObjectsOfTypeAll<Trait>();
                     foreach (var t in allTraits)
                     {
-                        CottonCowModPlugin.Log.LogInfo($"ItemManagerPatch: Found trait: '{t.name}'");
                         if (t.name.ToLower().Contains("garden"))
                         {
                             gardeningTrait = t;

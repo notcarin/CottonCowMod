@@ -125,10 +125,6 @@ namespace CottonCowMod
                 center.y - extents.y * 0.6f,
                 center.z);
             _geometryReady = true;
-
-            CottonCowModPlugin.Log.LogInfo(
-                $"CowTroughFoodDisplay: LocalBounds center={center}, extents={extents}, " +
-                $"longAxis={(_longAxisIsX ? "X" : "Z")}, spread={_longSpread:F3}");
         }
 
         private void OnInventoryChanged(Inventory sender)
@@ -283,8 +279,6 @@ namespace CottonCowMod
             float scale = (maxDim > 0.001f) ? targetSize / maxDim : 1f;
 
             _scaleCache[foodName] = scale;
-            CottonCowModPlugin.Log.LogInfo(
-                $"CowTroughFoodDisplay: {foodName} maxDim={maxDim:F3}, scale={scale:F3}");
             return scale;
         }
 

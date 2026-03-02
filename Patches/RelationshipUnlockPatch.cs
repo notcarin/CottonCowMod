@@ -5,7 +5,7 @@ using TotS.Unlock;
 namespace CottonCowMod.Patches
 {
     /// <summary>
-    /// Fires cow unlock strings when a Cotton NPC reaches relationship level 11.
+    /// Fires cow unlock strings when a Cotton NPC reaches relationship level 13.
     /// Adds the string to UnlockManager for persistence and fires NotifyUnlockRequest
     /// so PlayerCows and other listeners are notified.
     /// </summary>
@@ -15,14 +15,7 @@ namespace CottonCowMod.Patches
         [HarmonyPostfix]
         static void Postfix(string relationshipTargetKey, int oldLevel, int newLevel, bool showPrompt)
         {
-            // Log all Cotton level changes so we can confirm this patch is active
-            if (relationshipTargetKey == "Farmer_Cotton" || relationshipTargetKey == "Young_Tom_Cotton")
-            {
-                CottonCowModPlugin.Log.LogInfo(
-                    $"RelationshipUnlockPatch: {relationshipTargetKey} level changed {oldLevel} → {newLevel}");
-            }
-
-            if (newLevel != 11)
+            if (newLevel != 13)
                 return;
 
             string unlockString = null;

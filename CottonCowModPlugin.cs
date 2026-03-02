@@ -187,7 +187,7 @@ namespace CottonCowMod
         /// <summary>
         /// Debug command (F12): Sets Cotton NPC relationships back to level 10
         /// (just below level 11 threshold), removes cow unlock strings, and despawns cows.
-        /// After pressing F12, give a gift to either Cotton NPC to re-trigger the cow unlock.
+        /// After pressing F12, give gifts to Cotton NPCs to test the L11-L13 unlock flow.
         /// </summary>
         private void DebugResetCottonRelationships()
         {
@@ -236,7 +236,7 @@ namespace CottonCowMod
                     for (int i = 0; i < 10 && i < thresholds.Length; i++)
                         targetXp += thresholds[i];
 
-                    targetXp += Math.Max(0, LevelCapPatches.XpForLevel11 - 10);
+                    targetXp += Math.Max(0, LevelCapPatches.XpPerAddedLevel - 10);
                 }
 
                 // Directly set private fields to avoid auto-level-up side effects
