@@ -13,7 +13,7 @@ using UnityEngine.InputSystem;
 
 namespace CottonCowMod
 {
-    [BepInPlugin("com.cottoncowmod.tots", "Cotton Cow Mod", "0.1.0")]
+    [BepInPlugin("com.cottoncowmod.tots", "Cotton Cow Mod", "1.0.0")]
     public class CottonCowModPlugin : BaseUnityPlugin
     {
         internal static ManualLogSource Log;
@@ -22,6 +22,7 @@ namespace CottonCowMod
         // --- Dev tools ---
         internal static ConfigEntry<bool> DevTimeSkip;
         internal static ConfigEntry<Key> TimeSkipKey;
+        internal static ConfigEntry<bool> DevLockGarden;
 
         // --- Debug ---
         internal static ConfigEntry<bool> DebugForceUnlock;
@@ -50,13 +51,15 @@ namespace CottonCowMod
         private void Awake()
         {
             Log = Logger;
-            Log.LogInfo("Cotton Cow Mod v0.1.0 loading...");
+            Log.LogInfo("Cotton Cow Mod v1.0.0 loading...");
 
             // Dev tools
             DevTimeSkip = Config.Bind("Dev", "TimeSkip", false,
                 "Enables F8 to skip to the next morning. Does not affect cow unlock gates.");
             TimeSkipKey = Config.Bind("Dev", "TimeSkipKey", Key.F8,
                 "Key to skip to the next in-game morning.");
+            DevLockGarden = Config.Bind("Dev", "LockGarden", false,
+                "Pretends Garden Area 5 is not unlocked (for testing need-space letters). Does not modify save data.");
 
             // Debug
             DebugForceUnlock = Config.Bind("Debug", "ForceUnlock", false,

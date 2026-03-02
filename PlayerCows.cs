@@ -37,6 +37,19 @@ namespace CottonCowMod
         public static bool Cow1Active => _cow1Active;
         public static bool Cow2Active => _cow2Active;
 
+        private static bool IsGardenArea5Unlocked
+        {
+            get
+            {
+                if (CottonCowModPlugin.DevLockGarden != null && CottonCowModPlugin.DevLockGarden.Value)
+                    return false;
+                if (CottonCowModPlugin.DebugForceUnlock != null && CottonCowModPlugin.DebugForceUnlock.Value)
+                    return true;
+                return Singleton<UnlockManager>.Exists
+                    && Singleton<UnlockManager>.Instance.ContainsUnlockString("Unlock_Garden_Area_5");
+            }
+        }
+
         /// <summary>
         /// Called from InventoryManagerPatch during scene load.
         /// Subscribes to UnlockManager and evaluates current state.
@@ -143,8 +156,7 @@ namespace CottonCowMod
                 ? Singleton<UnlockManager>.Instance : null;
             bool debugForce = CottonCowModPlugin.DebugForceUnlock != null
                            && CottonCowModPlugin.DebugForceUnlock.Value;
-            bool gardenOk = debugForce
-                || (unlockMgr != null && unlockMgr.ContainsUnlockString("Unlock_Garden_Area_5"));
+            bool gardenOk = IsGardenArea5Unlocked;
             bool cow1Unlocked = debugForce
                 || (unlockMgr != null && unlockMgr.ContainsUnlockString("RELATIONSHIPUNLOCK_CowUnlock_1"));
             bool cow2Unlocked = debugForce
@@ -206,8 +218,7 @@ namespace CottonCowMod
                 || unlockMgr.ContainsUnlockString("RELATIONSHIPUNLOCK_CowUnlock_1");
             _cow2RelationshipUnlocked = debugForce
                 || unlockMgr.ContainsUnlockString("RELATIONSHIPUNLOCK_CowUnlock_2");
-            _gardenArea5Unlocked = debugForce
-                || unlockMgr.ContainsUnlockString("Unlock_Garden_Area_5");
+            _gardenArea5Unlocked = IsGardenArea5Unlocked;
 
             bool newCow1 = _cow1RelationshipUnlocked && _gardenArea5Unlocked;
             bool newCow2 = _cow2RelationshipUnlocked && _gardenArea5Unlocked;
