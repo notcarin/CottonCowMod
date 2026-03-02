@@ -9,20 +9,17 @@ namespace CottonCowMod
     /// <summary>
     /// Shows 3D food models inside the physical cow trough based on inventory contents.
     ///
-    /// Each of the 4 inventory stacks maps to a display zone along the trough's long axis.
-    /// Within each zone, 1–4 models are shown based on stack quantity, with organic
-    /// (slightly randomized) positioning so they look tossed in rather than grid-placed.
+    /// Models are mixed across the full length of the trough regardless of type,
+    /// with organic (slightly randomized) positioning so they look tossed in.
     /// Models are auto-scaled so different food types appear at consistent sizes.
     ///
-    /// Quantity tiers: 1 item → 1 model, 2–3 → 2, 4–6 → 3, 7–9 → 4.
+    /// Quantity tiers per type: 1 item → 1 model, 2–3 → 2, 4–6 → 3, 7–9 → 4.
     /// </summary>
     public class CowTroughFoodDisplay : MonoBehaviour
     {
-        private const int SlotCount = 4;
-        private const int MaxModelsPerSlot = 4;
+        private const int MaxTotalModels = 16;
 
-        // Food model target size as a fraction of the distance between slot centers.
-        // Increase to make food larger, decrease for smaller.
+        // Food model target size relative to trough length.
         private const float FoodSizeFraction = 0.5f;
 
         // Randomization
@@ -30,25 +27,20 @@ namespace CottonCowMod
         private const float MaxTiltDegrees = 15f;
 
         private Inventory _inventory;
-        private Vector3[] _slotCenters;
-        private float _slotSpacing;
+        private Vector3 _troughCenter;
+        private float _longSpread;
         private float _shortAxisExtent;
+        private float _slotSpacing; // kept for scale calculation
         private bool _longAxisIsX;
+        private bool _geometryReady;
 
-        // Per-slot tracking: each slot can hold up to MaxModelsPerSlot GameObjects
-        private GameObject[][] _displayedModels;
-        private ItemType[] _displayedTypes;
-        private int[] _displayedCounts;
+        private List<GameObject> _spawnedModels;
         private Dictionary<string, float> _scaleCache;
 
         private void Start()
         {
-            _displayedModels = new GameObject[SlotCount][];
-            _displayedTypes = new ItemType[SlotCount];
-            _displayedCounts = new int[SlotCount];
+            _spawnedModels = new List<GameObject>();
             _scaleCache = new Dictionary<string, float>();
-            for (int i = 0; i < SlotCount; i++)
-                _displayedModels[i] = new GameObject[MaxModelsPerSlot];
 
             _inventory = CowTroughManager.Instance.GetInventory();
             if (_inventory == null)
@@ -59,31 +51,29 @@ namespace CottonCowMod
             }
 
             _inventory.Changed += OnInventoryChanged;
-            CalculateSlotPositions();
+            CalculateTroughGeometry();
             RefreshDisplay();
 
             CottonCowModPlugin.Log.LogInfo("CowTroughFoodDisplay: Initialized.");
         }
 
         /// <summary>
-        /// Calculates 4 slot center positions along the trough's long axis.
-        /// Uses mesh bounds transformed into trough-local space so the result is
-        /// independent of the trough's world rotation.
+        /// Measures the trough mesh bounds in local space to determine the long axis,
+        /// spread, and baseline Y for placing food models.
         /// </summary>
-        private void CalculateSlotPositions()
+        private void CalculateTroughGeometry()
         {
-            _slotCenters = new Vector3[SlotCount];
-
             var meshFilters = GetComponentsInChildren<MeshFilter>();
             if (meshFilters.Length == 0)
             {
                 CottonCowModPlugin.Log.LogWarning(
                     "CowTroughFoodDisplay: No MeshFilters found, using defaults.");
                 _longAxisIsX = true;
-                _slotSpacing = 0.4f;
+                _longSpread = 0.6f;
                 _shortAxisExtent = 0.1f;
-                for (int i = 0; i < SlotCount; i++)
-                    _slotCenters[i] = Vector3.up * 0.5f + Vector3.right * (i - 1.5f) * _slotSpacing;
+                _slotSpacing = 0.4f;
+                _troughCenter = Vector3.up * 0.5f;
+                _geometryReady = true;
                 return;
             }
 
@@ -123,32 +113,22 @@ namespace CottonCowMod
             Vector3 center = localBounds.center;
             Vector3 extents = localBounds.extents;
 
-            // Y: rest near the bottom of the trough
-            float slotY = center.y - extents.y * 0.6f;
-
             // Long axis = whichever local extent is larger
             _longAxisIsX = extents.x >= extents.z;
             float longExtent = _longAxisIsX ? extents.x : extents.z;
             _shortAxisExtent = _longAxisIsX ? extents.z : extents.x;
 
-            float spread = longExtent * 0.6f;
-            _slotSpacing = (SlotCount > 1) ? (2f * spread / (SlotCount - 1)) : spread;
-
-            for (int i = 0; i < SlotCount; i++)
-            {
-                float t = (i - (SlotCount - 1) * 0.5f) / ((SlotCount - 1) * 0.5f); // -1 to +1
-                float offset = t * spread;
-
-                if (_longAxisIsX)
-                    _slotCenters[i] = new Vector3(center.x + offset, slotY, center.z);
-                else
-                    _slotCenters[i] = new Vector3(center.x, slotY, center.z + offset);
-            }
+            _longSpread = longExtent * 0.6f;
+            _slotSpacing = longExtent * 0.4f; // matches original sizing
+            _troughCenter = new Vector3(
+                center.x,
+                center.y - extents.y * 0.6f,
+                center.z);
+            _geometryReady = true;
 
             CottonCowModPlugin.Log.LogInfo(
                 $"CowTroughFoodDisplay: LocalBounds center={center}, extents={extents}, " +
-                $"longAxis={(_longAxisIsX ? "X" : "Z")}, slotSpacing={_slotSpacing:F3}, " +
-                $"slots: [{string.Join(", ", Array.ConvertAll(_slotCenters, p => p.ToString("F3")))}]");
+                $"longAxis={(_longAxisIsX ? "X" : "Z")}, spread={_longSpread:F3}");
         }
 
         private void OnInventoryChanged(Inventory sender)
@@ -157,15 +137,17 @@ namespace CottonCowMod
         }
 
         /// <summary>
-        /// Groups inventory items into stacks by ItemType, then updates each visual slot
-        /// to match the corresponding stack's type and quantity tier.
+        /// Builds a mixed list of food models from all item types, shuffles them,
+        /// and distributes them across the full length of the trough.
         /// </summary>
         private void RefreshDisplay()
         {
-            if (_inventory == null || _slotCenters == null)
+            ClearAll();
+
+            if (_inventory == null || !_geometryReady || _inventory.Items.Count == 0)
                 return;
 
-            // Group flat item list into stacks (preserving insertion order)
+            // Group items by type
             var stacks = new List<KeyValuePair<ItemType, int>>();
             var typeToIndex = new Dictionary<ItemType, int>();
 
@@ -184,25 +166,48 @@ namespace CottonCowMod
                 }
             }
 
-            for (int i = 0; i < SlotCount; i++)
+            // Build flat list of model entries, round-robin across types for even mixing
+            var modelEntries = new List<ItemType>();
+            bool added = true;
+            while (added && modelEntries.Count < MaxTotalModels)
             {
-                if (i < stacks.Count)
+                added = false;
+                foreach (var stack in stacks)
                 {
-                    var itemType = stacks[i].Key;
-                    int count = stacks[i].Value;
-                    int modelCount = GetModelCount(count);
-
-                    // Skip rebuild if already showing this type at this quantity tier
-                    if (_displayedTypes[i] == itemType && _displayedCounts[i] == modelCount)
-                        continue;
-
-                    ClearSlot(i);
-                    SpawnSlotModels(i, itemType, modelCount);
+                    int needed = GetModelCount(stack.Value);
+                    int have = 0;
+                    foreach (var e in modelEntries)
+                        if (e == stack.Key) have++;
+                    if (have < needed)
+                    {
+                        modelEntries.Add(stack.Key);
+                        added = true;
+                        if (modelEntries.Count >= MaxTotalModels) break;
+                    }
                 }
-                else
-                {
-                    ClearSlot(i);
-                }
+            }
+
+            if (modelEntries.Count == 0)
+                return;
+
+            // Deterministic shuffle so types are mixed across the trough
+            int seed = 42;
+            foreach (var stack in stacks)
+                seed = seed * 31 + stack.Key.name.GetHashCode() + stack.Value;
+            var rng = new System.Random(seed);
+            for (int i = modelEntries.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                var tmp = modelEntries[i];
+                modelEntries[i] = modelEntries[j];
+                modelEntries[j] = tmp;
+            }
+
+            // Distribute models across the full trough length
+            int count = modelEntries.Count;
+            for (int i = 0; i < count; i++)
+            {
+                SpawnModel(i, count, modelEntries[i], rng);
             }
         }
 
@@ -217,50 +222,47 @@ namespace CottonCowMod
             return 4;
         }
 
-        private void SpawnSlotModels(int slotIndex, ItemType itemType, int modelCount)
+        private void SpawnModel(int index, int totalCount, ItemType itemType, System.Random rng)
         {
             var previewAspect = itemType.GetAspect<PreviewAspect>();
             if (previewAspect == null || previewAspect.DisplayPrefab == null)
-            {
-                CottonCowModPlugin.Log.LogWarning(
-                    $"CowTroughFoodDisplay: No DisplayPrefab for {itemType.name}.");
                 return;
-            }
 
-            var prefab = previewAspect.DisplayPrefab;
+            var model = UnityEngine.Object.Instantiate(previewAspect.DisplayPrefab, transform);
 
-            // Deterministic seed: same food type in same slot always looks the same
-            int baseSeed = slotIndex * 10000 + itemType.name.GetHashCode();
+            // Auto-scale
+            float scale = GetFoodScale(itemType.name, model);
+            model.transform.localScale = Vector3.one * scale;
 
-            for (int j = 0; j < modelCount; j++)
-            {
-                var rng = new System.Random(baseSeed + j);
+            // Position along the trough's long axis, with organic jitter
+            float t = totalCount == 1 ? 0f
+                : ((float)index / (totalCount - 1)) * 2f - 1f; // -1 to +1
+            float longOff = t * _longSpread;
 
-                var model = UnityEngine.Object.Instantiate(prefab, transform);
+            // Add jitter so models aren't in a perfect line
+            float jitterLong = (float)(rng.NextDouble() * 2 - 1) * _longSpread * 0.08f;
+            float jitterShort = (float)(rng.NextDouble() * 2 - 1) * _shortAxisExtent * 0.4f;
+            float yOff = (float)rng.NextDouble() * 0.005f;
 
-                // Auto-scale: normalize all food to a consistent size
-                float scale = GetFoodScale(itemType.name, model);
-                model.transform.localScale = Vector3.one * scale;
+            Vector3 pos = _troughCenter;
+            if (_longAxisIsX)
+                pos += new Vector3(longOff + jitterLong, yOff, jitterShort);
+            else
+                pos += new Vector3(jitterShort, yOff, longOff + jitterLong);
 
-                // Position: slot center + organic sub-offset
-                Vector3 subOffset = GetSubOffset(modelCount, j, rng);
-                model.transform.localPosition = _slotCenters[slotIndex] + subOffset;
+            model.transform.localPosition = pos;
 
-                // Rotation: full random spin on Y, slight random tilt on X/Z
-                float yaw = (float)(rng.NextDouble() * MaxYawDegrees);
-                float pitch = (float)(rng.NextDouble() * 2 - 1) * MaxTiltDegrees;
-                float roll = (float)(rng.NextDouble() * 2 - 1) * MaxTiltDegrees;
-                model.transform.localRotation = Quaternion.Euler(pitch, yaw, roll);
+            // Rotation: full random spin on Y, slight random tilt on X/Z
+            float yaw = (float)(rng.NextDouble() * MaxYawDegrees);
+            float pitch = (float)(rng.NextDouble() * 2 - 1) * MaxTiltDegrees;
+            float roll = (float)(rng.NextDouble() * 2 - 1) * MaxTiltDegrees;
+            model.transform.localRotation = Quaternion.Euler(pitch, yaw, roll);
 
-                _displayedModels[slotIndex][j] = model;
-            }
-
-            _displayedTypes[slotIndex] = itemType;
-            _displayedCounts[slotIndex] = modelCount;
+            _spawnedModels.Add(model);
         }
 
         /// <summary>
-        /// Computes auto-scale for a food model so its largest mesh dimension (any axis)
+        /// Computes auto-scale for a food model so its largest mesh dimension
         /// fits within a fraction of the slot spacing. Cached per food type.
         /// </summary>
         private float GetFoodScale(string foodName, GameObject instance)
@@ -282,82 +284,26 @@ namespace CottonCowMod
 
             _scaleCache[foodName] = scale;
             CottonCowModPlugin.Log.LogInfo(
-                $"CowTroughFoodDisplay: {foodName} meshMaxXZ={maxDim:F3}, targetSize={targetSize:F3}, scale={scale:F3}");
+                $"CowTroughFoodDisplay: {foodName} maxDim={maxDim:F3}, scale={scale:F3}");
             return scale;
         }
 
-        /// <summary>
-        /// Returns a local-space offset from the slot center for the j-th model in a cluster.
-        /// Positions are loosely arranged with seeded jitter for an organic look.
-        /// </summary>
-        private Vector3 GetSubOffset(int totalCount, int subIndex, System.Random rng)
+        private void ClearAll()
         {
-            float longFrac = 0f;
-            float shortFrac = 0f;
-
-            // Base fractional positions — deliberately asymmetric for a natural look
-            if (totalCount == 2)
+            if (_spawnedModels == null) return;
+            foreach (var model in _spawnedModels)
             {
-                longFrac  = subIndex == 0 ? -0.5f  : 0.45f;
-                shortFrac = subIndex == 0 ? -0.25f : 0.3f;
+                if (model != null)
+                    UnityEngine.Object.Destroy(model);
             }
-            else if (totalCount == 3)
-            {
-                float[] lf = { -0.55f, 0.35f, -0.1f };
-                float[] sf = { -0.2f, -0.15f, 0.3f };
-                longFrac = lf[subIndex];
-                shortFrac = sf[subIndex];
-            }
-            else if (totalCount >= 4)
-            {
-                float[] lf = { -0.5f, 0.45f, -0.2f, 0.3f };
-                float[] sf = { -0.25f, 0.2f, 0.3f, -0.3f };
-                longFrac = lf[subIndex];
-                shortFrac = sf[subIndex];
-            }
-
-            // Convert fractions to local units
-            float maxLong = _slotSpacing * 0.35f;
-            float maxShort = _shortAxisExtent * 0.4f;
-
-            float longOff = longFrac * maxLong;
-            float shortOff = shortFrac * maxShort;
-
-            // Add random jitter (±15% of the max offsets)
-            longOff += (float)(rng.NextDouble() * 2 - 1) * maxLong * 0.15f;
-            shortOff += (float)(rng.NextDouble() * 2 - 1) * maxShort * 0.15f;
-            float yOff = (float)rng.NextDouble() * 0.005f;
-
-            if (_longAxisIsX)
-                return new Vector3(longOff, yOff, shortOff);
-            else
-                return new Vector3(shortOff, yOff, longOff);
-        }
-
-        private void ClearSlot(int index)
-        {
-            for (int j = 0; j < MaxModelsPerSlot; j++)
-            {
-                if (_displayedModels[index][j] != null)
-                {
-                    UnityEngine.Object.Destroy(_displayedModels[index][j]);
-                    _displayedModels[index][j] = null;
-                }
-            }
-            _displayedTypes[index] = null;
-            _displayedCounts[index] = 0;
+            _spawnedModels.Clear();
         }
 
         private void OnDestroy()
         {
             if (_inventory != null)
                 _inventory.Changed -= OnInventoryChanged;
-
-            if (_displayedModels != null)
-            {
-                for (int i = 0; i < SlotCount; i++)
-                    ClearSlot(i);
-            }
+            ClearAll();
         }
     }
 }

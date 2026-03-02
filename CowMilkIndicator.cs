@@ -13,7 +13,7 @@ namespace CottonCowMod
     public class CowMilkIndicator : MonoBehaviour
     {
         private GameObject _indicator;
-        private float _baseHeight = 2.0f;
+        private float _baseHeight = 1.7f;
 
         void Start()
         {

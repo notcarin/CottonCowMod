@@ -85,17 +85,15 @@ namespace CottonCowMod
                 // Initialize daily milk production system
                 CowProductionManager.Initialize();
 
-                // Check for pending activations from a previous session
-                // (e.g. player unlocked level 11, saved, and reloaded)
-                if (CottonCowModPlugin.Cow1PendingActivation.Value)
+                // Process pending activations immediately on reload
+                // (deferral is only for the initial unlock moment so the cow appears
+                // the next morning — on reload the cow should just spawn right away)
+                if (CottonCowModPlugin.Cow1PendingActivation.Value ||
+                    CottonCowModPlugin.Cow2PendingActivation.Value)
                 {
                     CottonCowModPlugin.Log.LogInfo(
-                        "PlayerCows: Cow1 has pending activation from previous session.");
-                }
-                if (CottonCowModPlugin.Cow2PendingActivation.Value)
-                {
-                    CottonCowModPlugin.Log.LogInfo(
-                        "PlayerCows: Cow2 has pending activation from previous session.");
+                        "PlayerCows: Processing pending activations from previous session.");
+                    ProcessPendingActivations();
                 }
 
                 // Evaluate current state (for previously earned unlocks from save data)

@@ -107,20 +107,24 @@ namespace CottonCowMod.Patches
                         $"LevelCapPatches: [{caller}] {kvp.Key} XP thresholds: [{string.Join(", ", debugParts)}]");
                 }
 
-                if (data.MaxLevel >= NewMaxLevel)
-                    continue; // Already patched
+                // Patch the readonly MaxLevel field if needed
+                if (data.MaxLevel < NewMaxLevel)
+                    ht.Field("MaxLevel").SetValue(NewMaxLevel);
 
-                // Patch the readonly MaxLevel field
-                ht.Field("MaxLevel").SetValue(NewMaxLevel);
-
-                // Extend the readonly LevelXpThresholds array
+                // Extend or fix the LevelXpThresholds array
                 var thresholds = ht.Field("LevelXpThresholds").GetValue<int[]>();
-                if (thresholds != null && thresholds.Length < NewMaxLevel)
+                if (thresholds != null)
                 {
-                    var extended = new int[NewMaxLevel];
-                    Array.Copy(thresholds, extended, thresholds.Length);
-                    extended[NewMaxLevel - 1] = XpForLevel11;
-                    ht.Field("LevelXpThresholds").SetValue(extended);
+                    bool needsUpdate = thresholds.Length < NewMaxLevel
+                        || thresholds[NewMaxLevel - 1] != XpForLevel11;
+
+                    if (needsUpdate)
+                    {
+                        var extended = new int[NewMaxLevel];
+                        Array.Copy(thresholds, extended, Math.Min(thresholds.Length, NewMaxLevel));
+                        extended[NewMaxLevel - 1] = XpForLevel11;
+                        ht.Field("LevelXpThresholds").SetValue(extended);
+                    }
                 }
 
                 // Recalculate the readonly MaxXp (sum of all thresholds)
@@ -134,7 +138,7 @@ namespace CottonCowMod.Patches
                 }
 
                 CottonCowModPlugin.Log.LogInfo(
-                    $"LevelCapPatches: [{caller}] Patched {kvp.Key} -> MaxLevel={data.MaxLevel}");
+                    $"LevelCapPatches: [{caller}] Patched {kvp.Key} -> MaxLevel={data.MaxLevel}, L11 XP={XpForLevel11}");
             }
         }
     }

@@ -5,6 +5,7 @@ using BepInEx.Logging;
 using CottonCowMod.Patches;
 using HarmonyLib;
 using TotS;
+using TotS.Inventory;
 using TotS.Unlock;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -160,6 +161,24 @@ namespace CottonCowMod
             Cow1PendingActivation.Value = false;
             Cow2PendingActivation.Value = false;
 
+            // Remove cow trough from storage so re-unlock gives a fresh one
+            try
+            {
+                var storage = Singleton<InventoryManager>.Instance.Storage;
+                var troughType = CowTroughManager.CowTroughItemType;
+                if (storage != null && troughType != null)
+                {
+                    int removed = storage.RemoveAll(
+                        item => item.ItemType == troughType, destroyItems: true);
+                    if (removed > 0)
+                        Log.LogInfo($"ResetCowUnlocks: Removed {removed} CowFeedingTrough(s) from storage.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning($"ResetCowUnlocks: Could not clean trough from storage: {ex.Message}");
+            }
+
             Log.LogWarning(
                 "ResetCowUnlocks: Cleared all cow unlock strings, despawned cows, " +
                 "reset milk/streak/pending state. Set DebugForceUnlock=false and reload save to test.");
@@ -209,15 +228,15 @@ namespace CottonCowMod
 
                 // Calculate XP total for "level 10, almost at 11"
                 // Sum thresholds[0..9] to get total XP at level 10 start,
-                // then add most of thresholds[10] so one gift pushes to 11
+                // then add most of our L11 XP constant (not the in-memory value,
+                // which may still reflect the old 500 threshold from save data)
                 int targetXp = 0;
                 if (thresholds != null)
                 {
                     for (int i = 0; i < 10 && i < thresholds.Length; i++)
                         targetXp += thresholds[i];
 
-                    if (thresholds.Length > 10)
-                        targetXp += Math.Max(0, thresholds[10] - 10);
+                    targetXp += Math.Max(0, LevelCapPatches.XpForLevel11 - 10);
                 }
 
                 // Directly set private fields to avoid auto-level-up side effects

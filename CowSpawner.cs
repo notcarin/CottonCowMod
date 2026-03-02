@@ -294,6 +294,9 @@ namespace CottonCowMod
                             $"Q{savedMilkQuality}");
                     }
 
+                    // Add hungry follow behavior
+                    cowGO.AddComponent<CowFollowBehavior>();
+
                     // Constrain roaming to our boundary
                     AssignRoamingBoundary(cowGO);
 

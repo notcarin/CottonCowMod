@@ -213,9 +213,8 @@ namespace CottonCowMod.Patches
 
     /// <summary>
     /// Patches ItemTypeExtensions.DisplayName() and Description() to return custom
-    /// text for the CowFeedingTrough. Without this, the cloned ItemType would show
-    /// "CowFeedingTrough.DisplayName" (the raw localization key) since no Articy
-    /// entry exists for it.
+    /// text for the CowFeedingTrough. Covers tooltips, sorting, and other code paths
+    /// that call these extension methods.
     /// </summary>
     [HarmonyPatch(typeof(ItemTypeExtensions))]
     public static class CowTroughDisplayPatch
@@ -238,6 +237,26 @@ namespace CottonCowMod.Patches
         {
             if (itemType != null && itemType.name == "CowFeedingTrough")
                 __result = TroughDescription;
+        }
+    }
+
+    /// <summary>
+    /// Patches LocalizedText.UpdateText() to intercept CowFeedingTrough localization keys.
+    /// The storage UI grid uses PreviewAspect.DisplayNameKey → LocalizedText → Articy,
+    /// bypassing ItemTypeExtensions entirely. Since no Articy entry exists for our cloned
+    /// item, we intercept the keys here and set the text directly.
+    /// </summary>
+    [HarmonyPatch(typeof(LocalizedText), "UpdateText")]
+    public static class CowTroughLocalizedTextPatch
+    {
+        [HarmonyPostfix]
+        static void Postfix(LocalizedText __instance)
+        {
+            var key = __instance.Key;
+            if (key == "CowFeedingTrough.DisplayName")
+                __instance.Text.text = CowTroughDisplayPatch.TroughDisplayName;
+            else if (key == "CowFeedingTrough.Description")
+                __instance.Text.text = CowTroughDisplayPatch.TroughDescription;
         }
     }
 }

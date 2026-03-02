@@ -15,6 +15,13 @@ namespace CottonCowMod.Patches
         [HarmonyPostfix]
         static void Postfix(string relationshipTargetKey, int oldLevel, int newLevel, bool showPrompt)
         {
+            // Log all Cotton level changes so we can confirm this patch is active
+            if (relationshipTargetKey == "Farmer_Cotton" || relationshipTargetKey == "Young_Tom_Cotton")
+            {
+                CottonCowModPlugin.Log.LogInfo(
+                    $"RelationshipUnlockPatch: {relationshipTargetKey} level changed {oldLevel} → {newLevel}");
+            }
+
             if (newLevel != 11)
                 return;
 

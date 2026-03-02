@@ -42,18 +42,20 @@ namespace CottonCowMod
                 if (ownerNPC == "Young_Tom_Cotton")
                 {
                     title = "A Secret";
-                    content = "Hullo Hobbit!\n\n" +
+                    content = "Hullo Hobbit!\n" +
                               "I've got a surprise for you but I can't give it to you yet. " +
-                              "You need more garden space first. Please hurry up and expand " +
-                              "your garden, I can't keep this secret much longer!";
+                              "You need more garden space first.\n" +
+                              "Please hurry up and expand your garden, " +
+                              "I can't keep this secret much longer!";
                     signoff = "Your friend,";
                 }
                 else
                 {
                     title = "A Word From the Farm";
-                    content = "Hullo Hobbit!\n\n" +
+                    content = "Hullo Hobbit!\n" +
                               "I've got something for you — been meaning to bring it up " +
-                              "for a while now. Trouble is, you'd need a bit more room " +
+                              "for a while now.\n" +
+                              "Trouble is, you'd need a bit more room " +
                               "in that garden of yours first. Come see me once you've " +
                               "got the space sorted.";
                     signoff = "Your neighbour,";
@@ -120,25 +122,23 @@ namespace CottonCowMod
                 if (ownerNPC == "Young_Tom_Cotton")
                 {
                     title = "A Gift for You!";
-                    content = "Hullo Hobbit!\n\n" +
-                              "You won't believe it — one of our cows has been mooing at " +
-                              "your gate every morning since we became friends! " +
-                              "Da says I should just let her go to you. There's a feeding trough " +
-                              "in your garden storage. She eats vegetables, grains, and apples, " +
-                              "feed her every day and she'll have milk for you! " +
-                              "She's a good cow, promise!";
+                    content = "Hullo Hobbit!\n" +
+                              "One of our cows won't stop mooing at your gate! " +
+                              "Da says she's yours now.\n" +
+                              "There's a feeding trough in your garden storage — " +
+                              "she likes vegetables, grains, and apples. " +
+                              "Feed her every day and she'll have milk for you!";
                     signoff = "Your friend,";
                 }
                 else
                 {
                     title = "A Surprise for You";
-                    content = "Hullo Hobbit!\n\n" +
-                              "One of our cows has taken quite a shine to you, and frankly " +
-                              "she's been more trouble than she's worth " +
-                              "since you started visiting. I reckon she'd be happier in your " +
-                              "garden. I've put a feeding trough in your garden storage — " +
-                              "she'll need vegetables, grains, or apples. Feed her every day, " +
-                              "and don't forget to milk her! Take good care of her.";
+                    content = "Hullo Hobbit!\n" +
+                              "One of our cows has taken a shine to you. " +
+                              "I reckon she'd be happier in your garden.\n" +
+                              "There's a feeding trough in your garden storage — " +
+                              "she'll need vegetables, grains, or apples daily. " +
+                              "Don't forget to milk her!";
                     signoff = "Your neighbour,";
                 }
 
