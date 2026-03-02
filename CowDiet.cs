@@ -11,7 +11,7 @@ namespace CottonCowMod
         /// <summary>
         /// Human-readable summary of what cows eat, shown when invalid items are placed.
         /// </summary>
-        public const string DietDescription = "Cows eat vegetables, grains, and apples \u2014 not mushrooms";
+        public const string DietDescription = "Must be a Vegetable, Grain or Apple";
 
         private static readonly HashSet<string> ValidCowFoods = new HashSet<string>
         {
