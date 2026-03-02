@@ -5,6 +5,7 @@ using BepInEx.Logging;
 using CottonCowMod.Patches;
 using HarmonyLib;
 using TotS;
+using TotS.DateTime;
 using TotS.Inventory;
 using TotS.Unlock;
 using UnityEngine;
@@ -17,6 +18,10 @@ namespace CottonCowMod
     {
         internal static ManualLogSource Log;
         private Harmony _harmony;
+
+        // --- Dev tools ---
+        internal static ConfigEntry<bool> DevTimeSkip;
+        internal static ConfigEntry<Key> TimeSkipKey;
 
         // --- Debug ---
         internal static ConfigEntry<bool> DebugForceUnlock;
@@ -46,6 +51,12 @@ namespace CottonCowMod
         {
             Log = Logger;
             Log.LogInfo("Cotton Cow Mod v0.1.0 loading...");
+
+            // Dev tools
+            DevTimeSkip = Config.Bind("Dev", "TimeSkip", false,
+                "Enables F8 to skip to the next morning. Does not affect cow unlock gates.");
+            TimeSkipKey = Config.Bind("Dev", "TimeSkipKey", Key.F8,
+                "Key to skip to the next in-game morning.");
 
             // Debug
             DebugForceUnlock = Config.Bind("Debug", "ForceUnlock", false,
@@ -96,12 +107,20 @@ namespace CottonCowMod
 
         private void Update()
         {
-            // Position tagging tools only available when DebugForceUnlock is enabled
-            if (DebugForceUnlock == null || !DebugForceUnlock.Value)
-                return;
+            // Flush any deferred mail (MailManager may not be ready during early init)
+            CowMailSender.FlushPendingLetters();
 
             var keyboard = Keyboard.current;
             if (keyboard == null) return;
+
+            // Dev time skip (independent of DebugForceUnlock)
+            if (DevTimeSkip != null && DevTimeSkip.Value &&
+                keyboard[TimeSkipKey.Value].wasPressedThisFrame)
+                SkipToNextMorning();
+
+            // Position tagging tools only available when DebugForceUnlock is enabled
+            if (DebugForceUnlock == null || !DebugForceUnlock.Value)
+                return;
 
             if (keyboard[TagPositionKey.Value].wasPressedThisFrame)
                 TagPlayerPosition(CowSpawnPosition, "CowSpawn");
@@ -114,6 +133,20 @@ namespace CottonCowMod
 
             if (keyboard[Key.F12].wasPressedThisFrame)
                 DebugResetCottonRelationships();
+        }
+
+        private void SkipToNextMorning()
+        {
+            if (!Singleton<DateTimeManager>.Exists)
+            {
+                Log.LogWarning("DevTimeSkip: DateTimeManager not available.");
+                return;
+            }
+
+            Singleton<DateTimeManager>.Instance.DoDayTransition(
+                DayTransitionGameState.sDebugSequenceIdentifier, 1);
+
+            Log.LogInfo("DevTimeSkip: Skipping to next morning.");
         }
 
         /// <summary>

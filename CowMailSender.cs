@@ -12,6 +12,25 @@ namespace CottonCowMod
     /// </summary>
     public static class CowMailSender
     {
+        private static readonly List<string> _pendingCowLetters = new List<string>();
+
+        /// <summary>
+        /// Retries any cow letters that failed because MailManager wasn't ready.
+        /// Called from CottonCowModPlugin.Update() each frame.
+        /// </summary>
+        public static void FlushPendingLetters()
+        {
+            if (_pendingCowLetters.Count == 0) return;
+            if (MailManager.Instance == null) return;
+
+            // Copy and clear to avoid re-entrancy issues
+            var pending = new List<string>(_pendingCowLetters);
+            _pendingCowLetters.Clear();
+
+            foreach (var npc in pending)
+                QueueCowLetter(npc);
+        }
+
         /// <summary>
         /// Creates a "need more space" letter from the given NPC when the player reaches
         /// level 13 but doesn't have Garden Area 5 yet. Teases a gift without spoiling the cow.
@@ -110,8 +129,12 @@ namespace CottonCowMod
             {
                 if (MailManager.Instance == null)
                 {
-                    CottonCowModPlugin.Log.LogWarning(
-                        "CowMailSender: MailManager not available, cannot send letter.");
+                    if (!_pendingCowLetters.Contains(ownerNPC))
+                    {
+                        _pendingCowLetters.Add(ownerNPC);
+                        CottonCowModPlugin.Log.LogInfo(
+                            $"CowMailSender: MailManager not ready, deferring letter for {ownerNPC}.");
+                    }
                     return;
                 }
 
