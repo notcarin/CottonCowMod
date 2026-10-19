@@ -1,0 +1,71 @@
+[size=6][b]Cotton Cow Mod 1.0.2: the cows move into the glade[/b][/size]
+
+Hullo, hobbits! 1.0.2 is out, and it's a big bug-fix update. Thank you to everyone who took the time to report problems, here and on Reddit. Every report in this update came from one of you, and several of you described exactly what was going wrong.
+
+[b]If you've had any trouble with the cows, please update.[/b] You don't need to start a new game, move your decorations, or do anything special: install 1.0.2 and load your save.
+
+[center][img]https://staticdelivery.nexusmods.com/mods/8013/images/5/5-1792431969-286774484.png[/img][/center]
+
+[size=5][b]What was wrong, and what changed[/b][/size]
+
+[size=4][b]"My cows won't go into the glade"[/b][/size]
+The cows were always meant to live in the glade (the last garden expansion). In 1.0.1 they spawned near the chicken coop in the front yard instead, with a small roaming area around it. That's why cows were wandering into doors, walls, garden beds and the house, and why widening their roaming range sent them off into the village.
+
+[b]Now:[/b] the mod works out the shape of your glade, and the cows spawn in the middle of it and only wander inside it. A hungry cow that follows you waits at the edge of the glade instead of trailing you to your front door, and if a cow gets pushed out, she walks back in.
+
+[center][img]https://staticdelivery.nexusmods.com/mods/8013/images/5/5-1792431955-1852508898.png[/img][/center]
+
+[size=4][b]"I got the 'you need more room' letter, but I have every garden expansion"[/b][/size]
+The game can record the last garden expansion in two different ways, and 1.0.1 only checked for one of them. On some saves it never noticed the glade was unlocked. Clearing land or moving decorations wouldn't have helped.
+
+[b]Now:[/b] the mod checks every way the game records it. If this happened to you, your cow arrives the morning after you load your save with 1.0.2.
+
+[size=4][b]"I can't interact with the feeding trough"[/b][/size]
+Two things could cause this. The trough borrowed its menu from another storage object (like the chicken trough), so if nothing like that was loaded nearby, it simply wouldn't open. Separately, the game has its own Metal Feeding Trough that looks just like ours.
+
+[b]Now:[/b] the Cow Feeding Trough always opens, and keeps working after you use decoration mode. The letters now name the [b]Cow Feeding Trough[/b], so you know which one to place (it's in your Garden Storage). If your Storage is full when the cows arrive, the trough goes to your mailbox instead of being lost.
+
+[center][img]https://staticdelivery.nexusmods.com/mods/8013/images/5/5-1792431961-1850308582.png[/img][/center]
+
+[size=4][b]"I uninstalled the mod and the Cottons' shops are empty"[/b][/size]
+This was the worst one, and I'm sorry to everyone it caught. The mod raises the Cottons' friendship cap to 13, and 1.0.1 saved that into your save file. The base game has no shop stock above level 10, so without the mod Farmer Cotton and Young Tom had nothing to sell.
+
+[b]Now:[/b] saves are written so the base game sees the Cottons at a normal level 10, while the mod keeps their real level safely to the side. Uninstall whenever you like: the Cottons' shops work, and if you reinstall later, your cows and their real levels come back. (The trough disappears while the mod is uninstalled, and you get a new one when you reinstall.)
+
+[b]If one of your saves already has empty Cotton shops:[/b] install 1.0.2, load that save and sleep once. That fixes the save, and you can uninstall again afterwards if you want.
+
+[size=4][b]Things you might not have noticed[/b][/size]
+[list]
+[*][b]Cows vanished every time you loaded your save[/b] and only came back the next morning, and the "here's your cow" letter was sent again. In testing, one save had collected ten copies of the same letter. Now your cows are there as soon as you load, and each letter arrives once.
+[*][b]Milk and feeding streaks were shared between all your save slots[/b], so a new game could start with an old save's milk. Each save now has its own cows. Your existing milk and streak move into your save the first time you load it.
+[*]Milk is no longer lost if your backpack and mailbox are both full; it waits on the cow.
+[*]Saves with the Cottons at level 13 that somehow never got their cow now get it.
+[/list]
+
+[size=5][b]New: a bug report button[/b][/size]
+If something goes wrong, go to [b]Settings → Mods[/b] and turn on [b]Create Bug Report[/b] under Cotton Cow Mod (this needs Tales of the Shire Modding Tools, which the mod already requires). It copies a report to your clipboard, so you can paste it straight into a comment, and also saves it to your Desktop as [font=Courier New]CottonCowMod_BugReport.txt[/font].
+
+The report contains the mod's view of your save (cow and unlock status, the Cotton friendship levels) and recent log lines from the mod. Your Windows user name is removed. It makes it much easier for me to see what's going on without asking you to dig through game folders.
+
+You might also notice the Mods tab is a lot tidier: the mod's developer and internal settings used to show up there, and a couple of them could break a save if switched on. They're hidden now.
+
+[size=5][b]How this update was tested[/b][/size]
+This is the part I'm most excited about. Instead of me playing through over and over, this update was tested by [b]automated tests that run inside the real game[/b]. A test version of the mod loads a save, raises the Cotton friendships, unlocks the glade, sleeps through the nights, fills the trough, milks the cows, saves, reloads, and checks every step along the way, with screenshots.
+
+For the uninstall bug, the tests also launch the game [b]without[/b] the mod and check that the Cottons' shops have stock. Run on an old save from before this update, that check fails exactly the way you reported. Run on the same save after loading it in 1.0.2, it passes.
+
+None of the testing code is in the version you download.
+
+[size=5][b]Known issues[/b][/size]
+[list]
+[*]No custom cow model yet; the cows use the game's own.
+[*]No recipes that use cow milk yet.
+[*]Letters and the trough's text are English only.
+[/list]
+
+[size=5][b]Thank you[/b][/size]
+Thanks again for the reports, the patience, and the kind words. Several of you said you'd uninstalled while waiting for a fix. I hope 1.0.2 tempts you back to the glade. 🐄
+
+[center][img]https://staticdelivery.nexusmods.com/mods/8013/images/5/5-1792431966-1973349726.png[/img][/center]
+
+If you run into anything, use [b]Create Bug Report[/b] and paste the report into a comment or bug report.

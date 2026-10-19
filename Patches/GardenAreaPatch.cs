@@ -12,9 +12,11 @@ namespace CottonCowMod.Patches
     /// Catches when the Garden Area 5 boundary loads in the streaming world.
     ///
     /// Position resolution priority:
-    /// 1. Chicken spawn points (from PlayerChickens) — known outdoor garden locations
-    /// 2. TertiaryNPCSpawner spawn points — where animal NPCs appear
-    /// 3. Boundary polygon centroid — fallback (may land inside the house)
+    /// 1. Custom position from config (dev tool)
+    /// 2. The glade (see GladeArea) — spawn and roaming area shaped to fit it
+    /// 3. Chicken spawn points (from PlayerChickens) — known outdoor garden locations
+    /// 4. TertiaryNPCSpawner spawn points — where animal NPCs appear
+    /// 5. Boundary polygon centroid — fallback (may land inside the house)
     /// </summary>
     [HarmonyPatch(typeof(HomeDecorationHomesteadBoundary), "OnEnable")]
     public static class GardenAreaPatch
@@ -25,28 +27,47 @@ namespace CottonCowMod.Patches
             if (__instance.AreaID != GardenAreaPart.Area5)
                 return;
 
+            CowSpawner.OnGardenArea5Loaded(__instance);
+        }
+
+        /// <summary>
+        /// Works out where cows spawn and roam. Called by CowSpawner when the first cow spawns,
+        /// rather than when the boundary loads, so the surrounding terrain and NavMesh have loaded.
+        /// Returns false if the glade isn't ready and fallbacks aren't allowed yet (CowSpawner retries).
+        /// roamBoxes is null when only a spawn point is known (CowSpawner then uses a box around it).
+        /// </summary>
+        internal static bool TryResolveSpawnArea(HomeDecorationHomesteadBoundary area5, bool allowFallback,
+            out Vector3 spawnPos, out List<Bounds> roamBoxes)
+        {
+            roamBoxes = null;
+
             // Priority 1: Custom position from config (set via F9 key in debug mode)
-            Vector3 spawnPos;
             if (CottonCowModPlugin.TryGetCustomSpawnPosition(out spawnPos))
             {
                 CottonCowModPlugin.Log.LogInfo(
                     $"GardenAreaPatch: Using custom spawn position: {spawnPos}");
-                CowSpawner.OnGardenArea5Loaded(spawnPos);
-                return;
+                return true;
             }
 
-            // Priority 2: Find outdoor garden position from scene objects
+            // Priority 2: The glade (part of Area 5 outside Area 4), with a roaming area shaped to fit
+            if (area5 != null && GladeArea.TryBuild(area5, out spawnPos, out roamBoxes, logFailure: allowFallback))
+                return true;
+
+            if (!allowFallback)
+                return false;
+
+            // Priority 3: Find outdoor garden position from scene objects
             spawnPos = FindOutdoorGardenPosition();
 
-            if (spawnPos == Vector3.zero)
+            if (spawnPos == Vector3.zero && area5 != null)
             {
-                // Priority 3: boundary polygon centroid (may land inside house)
-                spawnPos = ComputeBoundaryCentroid(__instance);
+                // Priority 4: boundary polygon centroid (may land inside house)
+                spawnPos = ComputeBoundaryCentroid(area5);
             }
 
-            CottonCowModPlugin.Log.LogInfo(
-                $"GardenAreaPatch: Area5 spawn position: {spawnPos}");
-            CowSpawner.OnGardenArea5Loaded(spawnPos);
+            CottonCowModPlugin.Log.LogWarning(
+                $"GardenAreaPatch: Glade not available, using fallback spawn position: {spawnPos}");
+            return true;
         }
 
         /// <summary>

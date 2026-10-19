@@ -31,11 +31,9 @@ namespace CottonCowMod.Patches
                 CottonCowModPlugin.Log.LogInfo("CowTrough inventory already existed.");
             }
 
-            // Initialize PlayerCows — subscribe to UnlockManager and evaluate state.
-            // UnlockManager should exist by this point (both are scene singletons).
-            // Note: save data may not be loaded yet, so initial evaluation may show
-            // all-false. The UnlockRequest subscription will trigger re-evaluation
-            // when save data loads and unlocks are replayed.
+            // Initialize PlayerCows — subscribe to unlock and date events.
+            // Save data isn't loaded yet; PlayerCows evaluates cows once the save
+            // has loaded and the player has control.
             PlayerCows.Initialize();
         }
     }

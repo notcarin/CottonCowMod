@@ -1,5 +1,44 @@
 # Cotton Cow Mod — Session Notes
 
+## Session: Oct 19, 2026 — v1.0.2 (player bug reports + audit)
+
+### Player reports and causes
+- **"Need more garden space" forever**: garden 5 check only looked at `Unlock_Garden_Area_5`; the
+  game also/only records `GARDEN_AREA_Unlock_Garden_Area_5`. Now checks both + GardenAreaUnlockController.
+- **Cows in the front yard / stuck in doors / roaming the village**: without the dev-only
+  CowSpawnPosition, cows spawned at the chicken spawn point. Homestead boundaries are cumulative
+  (Area 5 polygon = whole homestead), so the glade = inside Area 5, outside Area 4 → `GladeArea.cs`.
+  Polygon transform y is ~0 while the glade ground is ~11, so ground is found by raycast + NavMesh.
+  Roaming area = one box per row of 2m glade cells (MapLocationArea clamps to the closest collider).
+  Follow targets are inset 1.5m; a leash walks strays back (CowFollowBehavior).
+- **Can't open the trough**: UI prefab was only cached from an active PhysicalStorage nearby.
+  Now also inactive/prefabs + PhysicalStorage.Awake postfix. Letters name the Cow Feeding Trough.
+- **Cotton shops empty after uninstalling**: the save stored Cotton maxLevel 13; vanilla has no
+  stock above 10. `RelationshipSavePatch` writes vanilla values and stores real XP as
+  `COTTONCOWMOD_XP_<npc>` in RelationshipManager's unlock strings. Broken saves repair on next save.
+
+### Architecture changes
+- Per-save state in `SaveState` (`COTTONCOWMOD_STATE_*` strings in UnlockManager): Delivered,
+  Pending, HasMilk, MilkQuality, Streak, Version. 1.0.1's config values migrate once (`LegacyConfig`).
+- `PlayerCows` waits for "player has control after a load" before evaluating (save systems load in
+  no fixed order; the game raises date events while loading). Delivered cows spawn on load, letters
+  only on first delivery.
+- Dev/debug settings moved to `com.cottoncowmod.tots.dev.cfg` (ModdingTools shows every entry in
+  plugin.Config in Settings > Mods). Only "Create Bug Report" is in the main config.
+- Version is `CottonCowModPlugin.Version`.
+
+### Testing
+- In-game automated tests: see `Testing/README.md`. `dotnet build -c Test` includes the harness;
+  always `dotnet build -c Release` before packaging.
+- Saves backed up in `TOTS/SaveBackups/`; test saves in `TOTS/TestFixtures/`.
+
+### Other
+- Unreleased 1.1.0 work is in a separate local copy (not in this repo). It needs the 1.0.2
+  changes merged in before release.
+- Release docs (README_NEXUS.md, INSTALL_GUIDE.md) are now in `release/`.
+- Not done (low priority): localization of letters/trough text/rejection text; CowDiet is a fixed
+  list (modded vegetables excluded); CowTrough inventory is created in every save even before unlock.
+
 ## Session: Feb 26, 2026
 
 ### What We Accomplished

@@ -147,8 +147,8 @@ namespace CottonCowMod
                     title = "A Gift for You!";
                     content = "Hullo Hobbit!\n" +
                               "One of our cows won't stop mooing at your gate! " +
-                              "Da says she's yours now.\n" +
-                              "There's a feeding trough in your garden storage — " +
+                              "Da says she's yours now. She'll live out in the glade.\n" +
+                              "There's a Cow Feeding Trough in your garden storage — " +
                               "she likes vegetables, grains, and apples. " +
                               "Feed her every day and she'll have milk for you!";
                     signoff = "Your friend,";
@@ -158,8 +158,8 @@ namespace CottonCowMod
                     title = "A Surprise for You";
                     content = "Hullo Hobbit!\n" +
                               "One of our cows has taken a shine to you. " +
-                              "I reckon she'd be happier in your garden.\n" +
-                              "There's a feeding trough in your garden storage — " +
+                              "I reckon she'd be happier in that glade of yours.\n" +
+                              "There's a Cow Feeding Trough in your garden storage — " +
                               "she'll need vegetables, grains, or apples daily. " +
                               "Don't forget to milk her!";
                     signoff = "Your neighbour,";

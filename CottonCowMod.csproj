@@ -7,7 +7,22 @@
     <LangVersion>latest</LangVersion>
     <OutputType>Library</OutputType>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Configurations>Debug;Release;Test</Configurations>
   </PropertyGroup>
+
+  <!-- Test build: includes the in-game test harness (Testing/). Never ship this build. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Test'">
+    <DefineConstants>$(DefineConstants);COTTONCOW_TESTS</DefineConstants>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Configuration)' != 'Test'">
+    <Compile Remove="Testing\**" />
+  </ItemGroup>
+  <!-- The uninstall-test probe is its own plugin (Testing/Probe/CottonCowTestProbe.csproj) -->
+  <ItemGroup>
+    <Compile Remove="Testing\Probe\**" />
+    <None Remove="Testing\Probe\**" />
+  </ItemGroup>
 
   <!-- Provides net48 reference assemblies without requiring the targeting pack -->
   <ItemGroup>
@@ -57,6 +72,22 @@
     </Reference>
     <Reference Include="UnityEngine.UI">
       <HintPath>..\TotS_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ScreenCaptureModule" Condition="'$(Configuration)' == 'Test'">
+      <HintPath>..\TotS_Data\Managed\UnityEngine.ScreenCaptureModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule" Condition="'$(Configuration)' == 'Test'">
+      <HintPath>..\TotS_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule" Condition="'$(Configuration)' == 'Test'">
+      <HintPath>..\TotS_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>..\TotS_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.AIModule">

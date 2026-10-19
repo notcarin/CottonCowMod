@@ -12,7 +12,7 @@ namespace CottonCowMod
     /// calculate milk quality based on food quality + feeding streak, set HasMilk flag.
     ///
     /// Mirrors the chicken egg system (SpawnCountOverrideOnePerUnlockedChicken).
-    /// Streak data is persisted via BepInEx config entries.
+    /// Milk and streak are stored per save (see SaveState).
     /// </summary>
     public static class CowProductionManager
     {
@@ -43,6 +43,10 @@ namespace CottonCowMod
 
         private static void OnDayChanged(PostDateChangedEvent evt)
         {
+            // The game also raises date events while a save loads; only real mornings count
+            if (!PlayerCows.SaveReady)
+                return;
+
             try
             {
                 ProcessDailyProduction();
@@ -89,10 +93,7 @@ namespace CottonCowMod
             if (playerCow.HasMilk)
                 return;
 
-            // Get current streak from config
-            float currentStreak = isCow1
-                ? CottonCowModPlugin.Cow1Streak.Value
-                : CottonCowModPlugin.Cow2Streak.Value;
+            float currentStreak = SaveState.GetFloat(SaveState.CowKey(isCow1, "Streak"));
 
             // Check for food in trough
             if (trough.Items.Count > 0)
@@ -124,7 +125,6 @@ namespace CottonCowMod
                 playerCow.HasMilk = true;
                 playerCow.MilkQuality = milkQuality;
 
-                // Persist milk state to config (survives save/load)
                 SaveMilkState(isCow1, true, milkQuality);
 
                 // Update visual indicator
@@ -153,24 +153,13 @@ namespace CottonCowMod
 
         private static void SaveStreak(bool isCow1, float value)
         {
-            if (isCow1)
-                CottonCowModPlugin.Cow1Streak.Value = value;
-            else
-                CottonCowModPlugin.Cow2Streak.Value = value;
+            SaveState.SetFloat(SaveState.CowKey(isCow1, "Streak"), value);
         }
 
         public static void SaveMilkState(bool isCow1, bool hasMilk, int quality)
         {
-            if (isCow1)
-            {
-                CottonCowModPlugin.Cow1HasMilk.Value = hasMilk;
-                CottonCowModPlugin.Cow1MilkQuality.Value = quality;
-            }
-            else
-            {
-                CottonCowModPlugin.Cow2HasMilk.Value = hasMilk;
-                CottonCowModPlugin.Cow2MilkQuality.Value = quality;
-            }
+            SaveState.SetBool(SaveState.CowKey(isCow1, "HasMilk"), hasMilk);
+            SaveState.SetInt(SaveState.CowKey(isCow1, "MilkQuality"), quality);
         }
 
         public static void Reset()

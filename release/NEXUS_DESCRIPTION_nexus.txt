@@ -1,0 +1,53 @@
+[size=6][b]Cotton Cow Mod[/b][/size]
+Adds two player-owned cows as late-game livestock, as well as new relationship levels with Farmer Cotton and Young Tom Cotton.
+
+[b]New in 1.0.2:[/b] your cows now live in the glade, uninstalling is safe, and lots of fixes. See the Changelog tab for details.
+
+[center][img]https://staticdelivery.nexusmods.com/mods/8013/images/5/5-1792431969-286774484.png[/img][/center]
+
+[size=5][b]Requirements[/b][/size]
+[list]
+[*][url=https://github.com/BepInEx/BepInEx/releases]BepInEx 5[/url]
+[*][url=https://www.nexusmods.com/talesoftheshirealordoftheringsgame/mods/3]Tales of the Shire Modding Tools[/url]
+[/list]
+
+[size=5][b]How It Works[/b][/size]
+Deepen your friendship with the Cotton family beyond the base game's level cap. At relationship level 13, Farmer Cotton and Young Tom Cotton will each gift you a cow of their own, complete with a letter, with new level-up rewards along the way.
+
+Your cows live in the glade: the last garden expansion, unlocked at Gardening Club level 5. If you've earned a cow before unlocking the glade, you'll receive a hint about what's to come, and your cow arrives the morning after you unlock it. You don't need to clear the glade or move your decorations.
+
+[size=5][b]Caring for Your Cows[/b][/size]
+When your first cow arrives, a [b]Cow Feeding Trough[/b] appears in your Garden Storage. Place it in the glade and fill it daily with vegetables, grains, or apples. It looks just like the game's Metal Feeding Trough, but only the Cow Feeding Trough feeds your cows.
+
+[center][img]https://staticdelivery.nexusmods.com/mods/8013/images/5/5-1792431961-1850308582.png[/img][/center]
+
+Feed your cow consistently and she'll produce milk each morning — look for the indicator above her head. The longer your feeding streak, the better the milk quality. Miss a day and your streak resets. A hungry cow will follow you around the glade until you fill the trough.
+
+If your backpack is full when you collect, the milk is sent to your mailbox instead.
+
+[size=5][b]Installation[/b][/size]
+[list=1]
+[*]Install BepInEx 5 and the Tales of the Shire Modding Tools (see Requirements above)
+[*]Place [font=Courier New]CottonCowMod.dll[/font] in [font=Courier New]BepInEx/plugins/CottonCowMod/[/font]
+[*]Launch the game
+[/list]
+
+[b]Updating:[/b] replace [font=Courier New]CottonCowMod.dll[/font] with the new one. Your cows come with you.
+
+[size=5][b]Reporting a Bug[/b][/size]
+In Settings → Mods, turn on [b]Create Bug Report[/b] under Cotton Cow Mod. A report is copied to your clipboard, ready to paste into a comment or bug report, and saved to your Desktop as [font=Courier New]CottonCowMod_BugReport.txt[/font]. It includes the mod's view of your save and recent log lines, with your Windows user name removed.
+
+[size=5][b]Compatibility[/b][/size]
+[b]Saves:[/b] each save slot keeps its own cows, milk and feeding streak.
+[b]Uninstalling:[/b] delete [font=Courier New]BepInEx/plugins/CottonCowMod/[/font]. Your save stays playable: without the mod, Farmer Cotton and Young Tom show as level 10 and their shops work normally, and the Cow Feeding Trough disappears. Reinstall and your cows and the Cottons' real levels come back, with a new trough in your Storage.
+[b]Uninstalled an older version and the Cottons' shops are empty?[/b] Install 1.0.2, load that save and sleep once. That fixes the save, and you can uninstall again afterwards.
+[b]WeMod/memory injectors:[/b] Using WeMod or other memory injectors alongside BepInEx mods may cause crashes.
+
+[size=5][b]Known Issues[/b][/size]
+[list]
+[*]No custom cow model yet; the cows use the game's own.
+[*]No recipes that use cow milk yet.
+[*]Letters and the trough's text are English only.
+[/list]
+
+Feedback on gameplay feel, balance, and anything that seems off is very welcome. If something goes wrong, please include a bug report from Settings → Mods.

@@ -13,91 +13,61 @@ using UnityEngine.InputSystem;
 
 namespace CottonCowMod
 {
-    [BepInPlugin("com.cottoncowmod.tots", "Cotton Cow Mod", "1.0.1")]
+    [BepInPlugin("com.cottoncowmod.tots", "Cotton Cow Mod", Version)]
     public class CottonCowModPlugin : BaseUnityPlugin
     {
+        internal const string Version = "1.0.2";
+
         internal static ManualLogSource Log;
+        internal static CottonCowModPlugin Instance;
         private Harmony _harmony;
 
-        // --- Dev tools ---
+        // --- Player settings (Config; ModdingTools shows these in Settings > Mods) ---
+        internal static ConfigEntry<bool> CreateBugReport;
+
+        // --- Developer settings (DevConfig, a separate file the Mods tab doesn't show) ---
+        internal static ConfigFile DevConfig;
         internal static ConfigEntry<bool> DevTimeSkip;
         internal static ConfigEntry<Key> TimeSkipKey;
         internal static ConfigEntry<bool> DevLockGarden;
-
-        // --- Debug ---
         internal static ConfigEntry<bool> DebugForceUnlock;
-
-        // --- Spawning ---
         internal static ConfigEntry<string> CowSpawnPosition;
-        internal static ConfigEntry<string> TroughSpawnPosition;
         internal static ConfigEntry<Key> TagPositionKey;
-        internal static ConfigEntry<Key> TagTroughPositionKey;
         internal static ConfigEntry<float> CowRoamRadius;
-
-        // --- Streak persistence (per-cow, survives save/load) ---
-        internal static ConfigEntry<float> Cow1Streak;
-        internal static ConfigEntry<float> Cow2Streak;
-
-        // --- Milk state persistence (survives save/load) ---
-        internal static ConfigEntry<bool> Cow1HasMilk;
-        internal static ConfigEntry<int> Cow1MilkQuality;
-        internal static ConfigEntry<bool> Cow2HasMilk;
-        internal static ConfigEntry<int> Cow2MilkQuality;
-
-        // --- Pending activation (deferred spawn, survives save/quit/reload) ---
-        internal static ConfigEntry<bool> Cow1PendingActivation;
-        internal static ConfigEntry<bool> Cow2PendingActivation;
 
         private void Awake()
         {
             Log = Logger;
-            Log.LogInfo("Cotton Cow Mod v1.0.1 loading...");
+            Instance = this;
+            Log.LogInfo($"Cotton Cow Mod v{Version} loading...");
 
-            // Dev tools
-            DevTimeSkip = Config.Bind("Dev", "TimeSkip", false,
-                "Enables F8 to skip to the next morning. Does not affect cow unlock gates.");
-            TimeSkipKey = Config.Bind("Dev", "TimeSkipKey", Key.F8,
+            CreateBugReport = Config.Bind("Bug Report", BugReport.ToggleKey, false,
+                "Turn on to save a bug report to your Desktop and copy it to the clipboard. " +
+                "Paste it into your bug report message. Switches itself back off.");
+            BugReport.Initialize(CreateBugReport, Config);
+
+            // ModdingTools turns every entry in Config into a control in Settings > Mods,
+            // so developer tools live in their own file where players won't stumble on them.
+            DevConfig = new ConfigFile(
+                System.IO.Path.Combine(Paths.ConfigPath, "com.cottoncowmod.tots.dev.cfg"), true);
+            DevTimeSkip = DevConfig.Bind("Dev", "TimeSkip", false,
+                "Enables TimeSkipKey to skip to the next morning. Does not affect cow unlock gates.");
+            TimeSkipKey = DevConfig.Bind("Dev", "TimeSkipKey", Key.F8,
                 "Key to skip to the next in-game morning.");
-            DevLockGarden = Config.Bind("Dev", "LockGarden", false,
+            DevLockGarden = DevConfig.Bind("Dev", "LockGarden", false,
                 "Pretends Garden Area 5 is not unlocked (for testing need-space letters). Does not modify save data.");
-
-            // Debug
-            DebugForceUnlock = Config.Bind("Debug", "ForceUnlock", false,
-                "Forces both cow unlock gates to true (bypasses relationship + garden area checks). For testing only.");
-
-            // Spawning
-            CowSpawnPosition = Config.Bind("Spawning", "CowSpawnPosition", "",
-                "Custom cow spawn position as \"x,y,z\". Press TagPositionKey (F9) in-game to set.");
-            TroughSpawnPosition = Config.Bind("Spawning", "TroughSpawnPosition", "",
-                "Custom trough placement position+rotation as \"x,y,z,yRot\". Press TagTroughPositionKey (F10) in-game to set.");
-            TagPositionKey = Config.Bind("Spawning", "TagPositionKey", Key.F9,
+            DebugForceUnlock = DevConfig.Bind("Debug", "ForceUnlock", false,
+                "Forces both cow unlock gates to true (bypasses relationship + garden area checks). " +
+                "Also enables F9 (tag spawn), F11 (reset cow unlocks) and F12 (reset Cotton relationships to 10).");
+            CowSpawnPosition = DevConfig.Bind("Spawning", "CowSpawnPosition", "",
+                "Custom cow spawn position as \"x,y,z\", overriding the glade. Press TagPositionKey in-game to set.");
+            TagPositionKey = DevConfig.Bind("Spawning", "TagPositionKey", Key.F9,
                 "Key to save the player's current position as the cow spawn point.");
-            TagTroughPositionKey = Config.Bind("Spawning", "TagTroughPositionKey", Key.F10,
-                "Key to save the player's current position as the trough placement point.");
-            CowRoamRadius = Config.Bind("Spawning", "CowRoamRadius", 8f,
-                "Half-size of the cow roaming area in meters.");
+            CowRoamRadius = DevConfig.Bind("Spawning", "CowRoamRadius", 8f,
+                "Half-size of the cow roaming box in meters when the glade can't be found.");
 
-            // Streak persistence
-            Cow1Streak = Config.Bind("Internal", "Cow1Streak", 0f,
-                "Feeding streak for Cow 1. Managed automatically — do not edit.");
-            Cow2Streak = Config.Bind("Internal", "Cow2Streak", 0f,
-                "Feeding streak for Cow 2. Managed automatically — do not edit.");
-
-            // Milk state persistence
-            Cow1HasMilk = Config.Bind("Internal", "Cow1HasMilk", false,
-                "Whether Cow 1 has milk ready. Managed automatically — do not edit.");
-            Cow1MilkQuality = Config.Bind("Internal", "Cow1MilkQuality", 0,
-                "Milk quality for Cow 1. Managed automatically — do not edit.");
-            Cow2HasMilk = Config.Bind("Internal", "Cow2HasMilk", false,
-                "Whether Cow 2 has milk ready. Managed automatically — do not edit.");
-            Cow2MilkQuality = Config.Bind("Internal", "Cow2MilkQuality", 0,
-                "Milk quality for Cow 2. Managed automatically — do not edit.");
-
-            // Pending activation persistence
-            Cow1PendingActivation = Config.Bind("Internal", "Cow1PendingActivation", false,
-                "Whether Cow 1 is waiting to spawn next morning. Managed automatically — do not edit.");
-            Cow2PendingActivation = Config.Bind("Internal", "Cow2PendingActivation", false,
-                "Whether Cow 2 is waiting to spawn next morning. Managed automatically — do not edit.");
+            // 1.0.1 kept cow state and dev settings in Config; pick up the old state for migration
+            LegacyConfig.Load(Config, DevConfig);
 
             if (DebugForceUnlock.Value)
                 Log.LogWarning("DEBUG MODE: ForceUnlock is enabled.");
@@ -106,10 +76,18 @@ namespace CottonCowMod
             _harmony.PatchAll();
 
             Log.LogInfo("Cotton Cow Mod loaded successfully.");
+
+#if COTTONCOW_TESTS
+            Testing.TestRunner.StartIfRequested();
+#endif
         }
 
         private void Update()
         {
+            // Detect when a loaded save is ready, then evaluate cows
+            PlayerCows.Update();
+            CowSpawner.Update();
+
             // Flush any deferred mail (MailManager may not be ready during early init)
             CowMailSender.FlushPendingLetters();
 
@@ -127,9 +105,6 @@ namespace CottonCowMod
 
             if (keyboard[TagPositionKey.Value].wasPressedThisFrame)
                 TagPlayerPosition(CowSpawnPosition, "CowSpawn");
-
-            if (keyboard[TagTroughPositionKey.Value].wasPressedThisFrame)
-                TagPlayerPosition(TroughSpawnPosition, "TroughSpawn");
 
             if (keyboard[Key.F11].wasPressedThisFrame)
                 ResetCowUnlocks();
@@ -185,17 +160,9 @@ namespace CottonCowMod
             // Reset in-memory state
             CowSpawner.Reset();
 
-            // Clear persisted milk/streak state
-            Cow1HasMilk.Value = false;
-            Cow1MilkQuality.Value = 0;
-            Cow2HasMilk.Value = false;
-            Cow2MilkQuality.Value = 0;
-            Cow1Streak.Value = 0f;
-            Cow2Streak.Value = 0f;
-
-            // Clear pending activation state
-            Cow1PendingActivation.Value = false;
-            Cow2PendingActivation.Value = false;
+            // Clear this save's milk/streak/delivery state
+            foreach (string entry in SaveState.All())
+                SaveState.Set(entry.Substring(0, entry.IndexOf('=')), null);
 
             // Remove cow trough from storage so re-unlock gives a fresh one
             try
@@ -302,21 +269,11 @@ namespace CottonCowMod
             }
 
             Vector3 pos = player.transform.position;
-            string posStr;
-
-            if (label == "TroughSpawn")
-            {
-                // Save position + Y rotation for trough orientation
-                float yRot = player.transform.eulerAngles.y;
-                posStr = $"{pos.x:F2},{pos.y:F2},{pos.z:F2},{yRot:F2}";
-            }
-            else
-            {
-                posStr = $"{pos.x:F2},{pos.y:F2},{pos.z:F2}";
-            }
+            string posStr = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "{0:F2},{1:F2},{2:F2}", pos.x, pos.y, pos.z);
 
             configEntry.Value = posStr;
-            Config.Save();
+            DevConfig.Save();
 
             Log.LogInfo($"{label}: Saved position: {posStr}");
             Log.LogInfo($"{label}: Restart or reload the save for changes to take effect.");
@@ -325,36 +282,6 @@ namespace CottonCowMod
         internal static bool TryGetCustomSpawnPosition(out Vector3 position)
         {
             return TryParsePosition(CowSpawnPosition, out position);
-        }
-
-        internal static bool TryGetTroughPosition(out Vector3 position, out float yRotation)
-        {
-            position = Vector3.zero;
-            yRotation = 0f;
-
-            if (TroughSpawnPosition == null || string.IsNullOrEmpty(TroughSpawnPosition.Value))
-                return false;
-
-            string[] parts = TroughSpawnPosition.Value.Split(',');
-            if (parts.Length < 3)
-                return false;
-
-            var style = System.Globalization.NumberStyles.Float;
-            var culture = System.Globalization.CultureInfo.InvariantCulture;
-
-            if (float.TryParse(parts[0].Trim(), style, culture, out float x) &&
-                float.TryParse(parts[1].Trim(), style, culture, out float y) &&
-                float.TryParse(parts[2].Trim(), style, culture, out float z))
-            {
-                position = new Vector3(x, y, z);
-
-                // Optional 4th value: Y rotation
-                if (parts.Length >= 4)
-                    float.TryParse(parts[3].Trim(), style, culture, out yRotation);
-
-                return true;
-            }
-            return false;
         }
 
         internal static bool TryParsePosition(ConfigEntry<string> entry, out Vector3 position)
