@@ -13,7 +13,7 @@ using UnityEngine.InputSystem;
 
 namespace CottonCowMod
 {
-    [BepInPlugin("com.cottoncowmod.tots", "Cotton Cow Mod", "1.0.0")]
+    [BepInPlugin("com.cottoncowmod.tots", "Cotton Cow Mod", "1.0.1")]
     public class CottonCowModPlugin : BaseUnityPlugin
     {
         internal static ManualLogSource Log;
@@ -51,7 +51,7 @@ namespace CottonCowMod
         private void Awake()
         {
             Log = Logger;
-            Log.LogInfo("Cotton Cow Mod v1.0.0 loading...");
+            Log.LogInfo("Cotton Cow Mod v1.0.1 loading...");
 
             // Dev tools
             DevTimeSkip = Config.Bind("Dev", "TimeSkip", false,
