@@ -68,7 +68,7 @@ namespace CottonCowMod.Patches
             }
         }
 
-        private static void GiveMilkToPlayer(PlayerOwnedCow cow, GameObject cowGO)
+        internal static void GiveMilkToPlayer(PlayerOwnedCow cow, GameObject cowGO)
         {
             // Find Ingredient_Milk ItemType
             var milkType = Singleton<ItemManager>.Instance.GetItemType(
@@ -94,20 +94,23 @@ namespace CottonCowMod.Patches
                 CottonCowModPlugin.Log.LogInfo(
                     $"AnimalInteractionPatch: Delivered Q{quality} milk to backpack.");
             }
-            else
+            else if (Singleton<InventoryManager>.Instance.Mailbox.Add(milkItem))
             {
-                // Backpack full — send to mailbox
-                var mailbox = Singleton<InventoryManager>.Instance.Mailbox;
-                mailbox.Add(milkItem);
                 CottonCowModPlugin.Log.LogInfo(
                     $"AnimalInteractionPatch: Backpack full — Q{quality} milk sent to mailbox.");
+            }
+            else
+            {
+                // Nowhere to put it — keep the milk on the cow so it isn't lost
+                CottonCowModPlugin.Log.LogWarning(
+                    "AnimalInteractionPatch: Backpack and mailbox full, milk stays with the cow.");
+                return;
             }
 
             // Clear milk flag
             cow.HasMilk = false;
             cow.MilkQuality = 0;
 
-            // Persist cleared milk state to config
             bool isCow1 = cowGO == CowSpawner.GetCow1GO();
             CowProductionManager.SaveMilkState(isCow1, false, 0);
 

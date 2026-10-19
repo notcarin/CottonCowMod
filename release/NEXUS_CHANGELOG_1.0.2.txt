@@ -1,0 +1,10 @@
+Cows now spawn in the glade and stay there (no more cows in doors, walls, garden beds or the village)
+Fixed cows never arriving for some players who had unlocked the glade (the endless "you need more room" letter)
+Fixed the Cottons' shops going empty after uninstalling the mod. Affected saves are fixed by loading them with 1.0.2 and sleeping once
+Fixed the Cow Feeding Trough sometimes not opening
+Cows no longer disappear until morning every time you load, and their letters are no longer sent again
+Milk and feeding streaks are now saved per save slot
+A missing Cow Feeding Trough is replaced (e.g. after saving with the mod uninstalled)
+Milk is no longer lost when your backpack and mailbox are both full
+New: Create Bug Report in Settings > Mods copies a bug report to your clipboard
+Developer and internal settings no longer show in Settings > Mods

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using CottonCowMod.Patches;
 using HarmonyLib;
 using Lab42.Platforms;
+using TotS;
 using TotS.Character;
 using TotS.World;
 using UnityEngine;
@@ -10,17 +12,18 @@ namespace CottonCowMod
 {
     /// <summary>
     /// Handles finding the cow NPCRace and spawning/despawning cows from the NPC pool.
-    /// Cows are spawned in Garden Area 5 and tagged with PlayerOwnedCow.
+    /// Cows are spawned in the glade (Garden Area 5) and tagged with PlayerOwnedCow.
     ///
     /// Spawning is deferred until Garden Area 5 actually loads in the streaming world,
     /// since it may not be available during early initialization.
     ///
-    /// Creates a roaming boundary (BoxCollider trigger + MapLocationArea) so cows
-    /// stay near their spawn point. The boundary size is configurable via CowRoamRadius.
+    /// Creates a roaming boundary (BoxCollider triggers + MapLocationArea) so cows stay in
+    /// the glade (see GladeArea), or within CowRoamRadius of a fallback spawn point.
     /// </summary>
     public static class CowSpawner
     {
         private static NPCRace _cowRace;
+        private static HomeDecorationHomesteadBoundary _area5Boundary;
         private static Vector3 _gardenArea5Position;
         private static bool _gardenArea5Found;
 
@@ -40,38 +43,87 @@ namespace CottonCowMod
         private static GameObject _boundaryGO;
         private static MapLocationArea _boundaryArea;
 
+        // Waiting for the glade's terrain to load before falling back to another spawn point
+        private const float GladeWaitSeconds = 60f;
+        private const float DeferredRetrySeconds = 2f;
+        private static float _spawnAreaFirstAttempt = -1f;
+        private static float _nextDeferredRetry;
+        private static bool _spawnAreaIsGlade;
+
         public static bool Cow1Spawned => _cow1GO != null;
         public static bool Cow2Spawned => _cow2GO != null;
+        public static bool GardenArea5Found => _gardenArea5Found;
 
         public static GameObject GetCow1GO() => _cow1GO;
         public static GameObject GetCow2GO() => _cow2GO;
 
         /// <summary>
-        /// Called from GardenAreaPatch when Garden Area 5 loads in the streaming world.
-        /// Sets the spawn position and processes any deferred spawn requests.
+        /// Called from GardenAreaPatch when Garden Area 5's boundary loads in the streaming world.
+        /// Records it and processes any deferred spawn requests. The spawn area itself is worked
+        /// out when the first cow spawns (see EnsureSpawnArea).
         /// </summary>
-        public static void OnGardenArea5Loaded(Vector3 position)
+        public static void OnGardenArea5Loaded(HomeDecorationHomesteadBoundary area5)
         {
-            _gardenArea5Position = position;
+            _area5Boundary = area5;
             _gardenArea5Found = true;
-            CottonCowModPlugin.Log.LogInfo(
-                $"CowSpawner: Garden Area 5 position set to {position}");
+            CottonCowModPlugin.Log.LogInfo("CowSpawner: Garden Area 5 boundary loaded.");
+            ProcessDeferredSpawns();
+        }
 
-            // Create the roaming boundary at the spawn position
-            CreateRoamingBoundary(position);
+        /// <summary>
+        /// Works out the spawn position and roaming area the first time a cow spawns
+        /// (the glade if it can be found; see GardenAreaPatch.ResolveSpawnArea).
+        /// </summary>
+        private static bool EnsureSpawnArea()
+        {
+            if (_boundaryGO != null)
+                return true;
 
-            // Process deferred spawns
+            // The garden boundary can load before the terrain under the glade (e.g. loading a
+            // save away from home), so keep retrying the glade for a while before falling back
+            if (_spawnAreaFirstAttempt < 0f)
+                _spawnAreaFirstAttempt = Time.realtimeSinceStartup;
+            bool allowFallback = Time.realtimeSinceStartup - _spawnAreaFirstAttempt > GladeWaitSeconds;
+
+            if (!GardenAreaPatch.TryResolveSpawnArea(_area5Boundary, allowFallback,
+                    out _gardenArea5Position, out var roamBoxes))
+                return false;
+
+            _spawnAreaIsGlade = roamBoxes != null;
+            CottonCowModPlugin.Log.LogInfo($"CowSpawner: Spawn position set to {_gardenArea5Position}");
+            CreateRoamingBoundary(_gardenArea5Position, roamBoxes);
+            return true;
+        }
+
+        /// <summary>
+        /// Called every frame from the plugin; retries deferred spawns every couple of seconds.
+        /// </summary>
+        public static void Update()
+        {
+            if (!_gardenArea5Found || !(_cow1PendingSpawn || _cow2PendingSpawn) ||
+                Time.realtimeSinceStartup < _nextDeferredRetry)
+                return;
+
+            _nextDeferredRetry = Time.realtimeSinceStartup + DeferredRetrySeconds;
+            ProcessDeferredSpawns();
+        }
+
+        /// <summary>
+        /// Retries deferred spawns. SpawnCow sets the pending flag again if it has to keep waiting.
+        /// </summary>
+        private static void ProcessDeferredSpawns()
+        {
             if (_cow1PendingSpawn && !Cow1Spawned)
             {
-                CottonCowModPlugin.Log.LogInfo("CowSpawner: Processing deferred Cow1 spawn.");
-                SpawnCow("Farmer_Cotton", true);
                 _cow1PendingSpawn = false;
+                if (SpawnCow("Farmer_Cotton", true) != null)
+                    CottonCowModPlugin.Log.LogInfo("CowSpawner: Deferred Cow1 spawn done.");
             }
             if (_cow2PendingSpawn && !Cow2Spawned)
             {
-                CottonCowModPlugin.Log.LogInfo("CowSpawner: Processing deferred Cow2 spawn.");
-                SpawnCow("Young_Tom_Cotton", false);
                 _cow2PendingSpawn = false;
+                if (SpawnCow("Young_Tom_Cotton", false) != null)
+                    CottonCowModPlugin.Log.LogInfo("CowSpawner: Deferred Cow2 spawn done.");
             }
         }
 
@@ -81,14 +133,18 @@ namespace CottonCowMod
         /// AreaBoundLocationObject.TrySamplePositionInArea() which delegates to
         /// MapLocationArea.SamplePosition() → ClosestPoint on the collider.
         /// </summary>
-        private static void CreateRoamingBoundary(Vector3 center)
+        private static void CreateRoamingBoundary(Vector3 center, List<Bounds> roamBoxes)
         {
             if (_boundaryGO != null)
                 return;
 
-            float radius = CottonCowModPlugin.CowRoamRadius != null
-                ? CottonCowModPlugin.CowRoamRadius.Value
-                : 12f;
+            if (roamBoxes == null || roamBoxes.Count == 0)
+            {
+                float radius = CottonCowModPlugin.CowRoamRadius != null
+                    ? CottonCowModPlugin.CowRoamRadius.Value
+                    : 12f;
+                roamBoxes = new List<Bounds> { new Bounds(center, new Vector3(radius * 2f, 20f, radius * 2f)) };
+            }
 
             try
             {
@@ -97,41 +153,51 @@ namespace CottonCowMod
                 _boundaryGO.SetActive(false);
                 _boundaryGO.transform.position = center;
 
-                // Box collider defines the roaming area (trigger = walkthrough, no physics blocking)
-                var box = _boundaryGO.AddComponent<BoxCollider>();
-                box.isTrigger = true;
-                box.size = new Vector3(radius * 2f, 20f, radius * 2f);
-                box.center = Vector3.zero;
-
-                // MapLocationArea holds the collider list that AnimalWanderState queries
+                // MapLocationArea holds the collider list that AnimalWanderState queries.
+                // SamplePosition clamps wander targets to the closest collider, so several
+                // boxes together form the roaming area's shape.
                 _boundaryArea = _boundaryGO.AddComponent<MapLocationArea>();
 
                 // Pre-initialize the colliders list so it's ready before OnEnable
-                Traverse.Create(_boundaryArea).Field("m_Colliders")
-                    .SetValue(new List<MapLocationAreaCollider>());
+                var colliders = new List<MapLocationAreaCollider>();
+                Traverse.Create(_boundaryArea).Field("m_Colliders").SetValue(colliders);
 
-                // MapLocationAreaCollider wraps the BoxCollider for the area system
-                var areaCol = _boundaryGO.AddComponent<MapLocationAreaCollider>();
-                Traverse.Create(areaCol).Field("m_Collider").SetValue(box);
-                Traverse.Create(areaCol).Field("m_MapLocationArea").SetValue(_boundaryArea);
-
-                // Enable the GO — BoxCollider becomes active, OnEnable fires
-                // MapLocationArea.OnEnable tries to register with MapLocationManager (may warn with null location, that's OK)
-                // MapLocationAreaCollider.OnEnable calls _boundaryArea.AddAreaCollider(this)
-                _boundaryGO.SetActive(true);
-
-                // Ensure the collider is registered (in case OnEnable order didn't auto-register)
-                var colliders = Traverse.Create(_boundaryArea).Field("m_Colliders")
-                    .GetValue<List<MapLocationAreaCollider>>();
-                if (colliders != null && !colliders.Contains(areaCol))
+                foreach (var bounds in roamBoxes)
                 {
+                    // Box collider defines part of the roaming area (trigger = walkthrough, no physics blocking)
+                    var boxGO = new GameObject("CowPastureBox");
+                    boxGO.transform.SetParent(_boundaryGO.transform, false);
+                    boxGO.transform.position = bounds.center;
+                    var box = boxGO.AddComponent<BoxCollider>();
+                    box.isTrigger = true;
+                    box.size = bounds.size;
+
+                    // MapLocationAreaCollider wraps the BoxCollider for the area system
+                    var areaCol = boxGO.AddComponent<MapLocationAreaCollider>();
+                    Traverse.Create(areaCol).Field("m_Collider").SetValue(box);
+                    Traverse.Create(areaCol).Field("m_MapLocationArea").SetValue(_boundaryArea);
                     colliders.Add(areaCol);
                 }
 
+                // Enable the GO — BoxColliders become active, OnEnable fires
+                // MapLocationArea.OnEnable tries to register with MapLocationManager (may warn with null location, that's OK)
+                // MapLocationAreaCollider.OnEnable may call AddAreaCollider again, so drop duplicates
+                _boundaryGO.SetActive(true);
+                colliders = Traverse.Create(_boundaryArea).Field("m_Colliders")
+                    .GetValue<List<MapLocationAreaCollider>>();
+                if (colliders != null)
+                {
+                    var unique = new List<MapLocationAreaCollider>();
+                    foreach (var col in colliders)
+                        if (!unique.Contains(col))
+                            unique.Add(col);
+                    Traverse.Create(_boundaryArea).Field("m_Colliders").SetValue(unique);
+                    colliders = unique;
+                }
+
                 CottonCowModPlugin.Log.LogInfo(
-                    $"CowSpawner: Created roaming boundary at {center}, " +
-                    $"size={radius * 2f}x{radius * 2f}m, " +
-                    $"colliders registered: {colliders?.Count ?? 0}");
+                    $"CowSpawner: Created roaming boundary at {center} " +
+                    $"from {roamBoxes.Count} box(es), colliders registered: {colliders?.Count ?? 0}");
             }
             catch (Exception ex)
             {
@@ -210,15 +276,17 @@ namespace CottonCowMod
             if (_cowRace == null && !FindCowRace())
                 return null;
 
-            // If garden area isn't loaded, defer the spawn (log once per cow)
-            if (!_gardenArea5Found)
+            // If the garden area or the ground under the glade isn't loaded yet, defer the
+            // spawn (log once per cow); Update retries deferred spawns
+            if (!_gardenArea5Found || !EnsureSpawnArea())
             {
+                string reason = !_gardenArea5Found ? "Garden Area 5 not loaded yet" : "glade not loaded yet";
                 if (isCow1)
                 {
                     _cow1PendingSpawn = true;
                     if (!_cow1DeferralLogged)
                     {
-                        CottonCowModPlugin.Log.LogInfo("CowSpawner: Garden Area 5 not loaded yet, deferring Cow1 spawn.");
+                        CottonCowModPlugin.Log.LogInfo($"CowSpawner: {reason}, deferring Cow1 spawn.");
                         _cow1DeferralLogged = true;
                     }
                 }
@@ -227,7 +295,7 @@ namespace CottonCowMod
                     _cow2PendingSpawn = true;
                     if (!_cow2DeferralLogged)
                     {
-                        CottonCowModPlugin.Log.LogInfo("CowSpawner: Garden Area 5 not loaded yet, deferring Cow2 spawn.");
+                        CottonCowModPlugin.Log.LogInfo($"CowSpawner: {reason}, deferring Cow2 spawn.");
                         _cow2DeferralLogged = true;
                     }
                 }
@@ -236,10 +304,22 @@ namespace CottonCowMod
 
             try
             {
-                // Offset the second cow's position slightly so they don't overlap
+                // The second cow spawns a few meters away so they don't overlap: on another
+                // glade cell if we have the glade, else offset and snapped to walkable ground
                 Vector3 spawnPos = _gardenArea5Position;
                 if (!isCow1)
-                    spawnPos += new Vector3(2f, 0f, 2f);
+                {
+                    if (_spawnAreaIsGlade)
+                    {
+                        spawnPos = GladeArea.SecondSpawnPosition;
+                    }
+                    else
+                    {
+                        spawnPos += new Vector3(2f, 0f, 2f);
+                        if (UnityEngine.AI.NavMesh.SamplePosition(spawnPos, out var navHit, 3f, -1))
+                            spawnPos = navHit.position;
+                    }
+                }
 
                 var location = new Location(spawnPos, Quaternion.identity);
 
@@ -275,13 +355,9 @@ namespace CottonCowMod
                     // Add milk indicator
                     var milkIndicator = cowGO.AddComponent<CowMilkIndicator>();
 
-                    // Restore persisted milk state from config
-                    bool savedHasMilk = isCow1
-                        ? CottonCowModPlugin.Cow1HasMilk.Value
-                        : CottonCowModPlugin.Cow2HasMilk.Value;
-                    int savedMilkQuality = isCow1
-                        ? CottonCowModPlugin.Cow1MilkQuality.Value
-                        : CottonCowModPlugin.Cow2MilkQuality.Value;
+                    // Restore this save's milk state
+                    bool savedHasMilk = SaveState.GetBool(SaveState.CowKey(isCow1, "HasMilk"));
+                    int savedMilkQuality = SaveState.GetInt(SaveState.CowKey(isCow1, "MilkQuality"));
 
                     if (savedHasMilk)
                     {
@@ -338,6 +414,7 @@ namespace CottonCowMod
             try
             {
                 var info = isCow1 ? _cow1Info : _cow2Info;
+                StripModComponents(isCow1 ? _cow1GO : _cow2GO);
 
                 if (info != null)
                 {
@@ -367,10 +444,35 @@ namespace CottonCowMod
         }
 
         /// <summary>
+        /// Cows come from the game's shared NPC pool, so remove everything we added before
+        /// a cow goes back. Otherwise a wild cow reusing that instance would be milkable
+        /// and follow the player, and respawning would stack duplicate components.
+        /// </summary>
+        private static void StripModComponents(GameObject cowGO)
+        {
+            if (cowGO == null)
+                return;
+
+            // CowMilkIndicator and CowFollowBehavior clean up after themselves in OnDestroy
+            DestroyIfPresent(cowGO.GetComponent<PlayerOwnedCow>());
+            DestroyIfPresent(cowGO.GetComponent<CowMilkIndicator>());
+            DestroyIfPresent(cowGO.GetComponent<CowFollowBehavior>());
+            DestroyIfPresent(cowGO.GetComponent<DeferredMilkIndicatorActivator>());
+        }
+
+        private static void DestroyIfPresent(Component component)
+        {
+            if (component != null)
+                UnityEngine.Object.Destroy(component);
+        }
+
+        /// <summary>
         /// Reset state (called on scene reload / cleanup).
         /// </summary>
         public static void Reset()
         {
+            StripModComponents(_cow1GO);
+            StripModComponents(_cow2GO);
             _cow1GO = null;
             _cow2GO = null;
             _cow1Info = null;
@@ -380,6 +482,8 @@ namespace CottonCowMod
             _cow1DeferralLogged = false;
             _cow2DeferralLogged = false;
             _gardenArea5Found = false;
+            _area5Boundary = null;
+            _spawnAreaFirstAttempt = -1f;
             _cowRace = null;
 
             if (_boundaryGO != null)

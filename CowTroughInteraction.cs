@@ -68,9 +68,7 @@ namespace CottonCowMod
                 return;
             }
 
-            // Register our interaction verbs
-            _interactable.SetTouchVerb(this);
-            _interactable.SetQuickInteractVerb(this);
+            RegisterVerbs();
 
             // Set up tooltip (show "Use" prompt when player is near)
             try
@@ -220,6 +218,24 @@ namespace CottonCowMod
 
             CottonCowModPlugin.Log.LogInfo(
                 $"CowTroughInteraction: Added InteractableCollider to {count} collider(s).");
+        }
+
+        /// <summary>
+        /// Registers our interaction verbs. Called from Start (after the Interactable exists)
+        /// and OnEnable, since OnDisable clears them when the trough is hidden, e.g. by
+        /// world streaming or decoration mode.
+        /// </summary>
+        private void RegisterVerbs()
+        {
+            if (_interactable == null)
+                return;
+            _interactable.SetTouchVerb(this);
+            _interactable.SetQuickInteractVerb(this);
+        }
+
+        private void OnEnable()
+        {
+            RegisterVerbs();
         }
 
         private void OnDisable()

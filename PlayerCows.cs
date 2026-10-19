@@ -1,5 +1,7 @@
 using System;
+using TotS;
 using TotS.Events;
+using TotS.Garden;
 using TotS.Items;
 using TotS.Inventory;
 using TotS.Scripts.DateTime;
@@ -10,14 +12,17 @@ namespace CottonCowMod
 {
     /// <summary>
     /// Tracks cow unlock state via dual-gate system:
-    /// - Relationship level 11 with a Cotton NPC (fires RELATIONSHIPUNLOCK_CowUnlock_1 or _2)
-    /// - Garden Area 5 unlocked
-    /// Both conditions must be met for each cow to become active.
+    /// - Relationship level 13 with a Cotton NPC (RELATIONSHIPUNLOCK_CowUnlock_1 or _2)
+    /// - Garden Area 5 (the glade) unlocked
+    /// Both conditions must be met for each cow.
     ///
-    /// When a cow becomes active:
-    /// - Sets a pending activation flag (persisted via config)
-    /// - On the next DateChangedEvent (next morning): spawns the cow, delivers trough
-    ///   to Storage (Garden tab), and sends a mail notification
+    /// Per-save state (see SaveState):
+    /// - Pending: conditions met, the cow arrives the next morning
+    /// - Delivered: the cow has arrived (letter sent, trough given) and spawns on every load
+    ///
+    /// Nothing is evaluated until the save has finished loading and the player has control
+    /// (see Update), because save systems read their data in no guaranteed order and the
+    /// game raises date events while loading.
     ///
     /// This is a static class (not MonoBehaviour) because DontDestroyOnLoad objects
     /// created during BepInEx chainloader don't receive Update() callbacks.
@@ -25,19 +30,31 @@ namespace CottonCowMod
     /// </summary>
     public static class PlayerCows
     {
-        private static bool _cow1RelationshipUnlocked;
-        private static bool _cow2RelationshipUnlocked;
-        private static bool _gardenArea5Unlocked;
+        internal const string GardenArea5UnlockString = "Unlock_Garden_Area_5";
+        private const int CowUnlockLevel = 13;
+
         private static bool _cow1Active;
         private static bool _cow2Active;
-        private static bool _initialized;
-        private static bool _firstEvalLogged;
+        private static bool _saveReady;
+        private static bool _unlockSubscribed;
         private static bool _dateEventSubscribed;
 
         public static bool Cow1Active => _cow1Active;
         public static bool Cow2Active => _cow2Active;
 
-        private static bool IsGardenArea5Unlocked
+        /// <summary>
+        /// True once the current save has loaded and the player has control.
+        /// </summary>
+        public static bool SaveReady => _saveReady;
+
+        /// <summary>
+        /// The game records an unlocked garden area under two keys: the raw request string
+        /// ("Unlock_Garden_Area_5") and a prefixed key ("GARDEN_AREA_Unlock_Garden_Area_5",
+        /// see GardenAreaData.CombinedString). Some saves only contain one of them, so we
+        /// accept either, and also ask the game's GardenAreaUnlockController directly
+        /// (the same check it uses to show the area's boundary).
+        /// </summary>
+        internal static bool IsGardenArea5Unlocked
         {
             get
             {
@@ -45,15 +62,29 @@ namespace CottonCowMod
                     return false;
                 if (CottonCowModPlugin.DebugForceUnlock != null && CottonCowModPlugin.DebugForceUnlock.Value)
                     return true;
-                return Singleton<UnlockManager>.Exists
-                    && Singleton<UnlockManager>.Instance.ContainsUnlockString("Unlock_Garden_Area_5");
+                if (!Singleton<UnlockManager>.Exists)
+                    return false;
+
+                var unlockMgr = Singleton<UnlockManager>.Instance;
+                if (unlockMgr.ContainsUnlockString(GardenArea5UnlockString) ||
+                    unlockMgr.ContainsUnlockString("GARDEN_AREA_" + GardenArea5UnlockString))
+                    return true;
+
+                var controller = Singleton<GardenManager>.Exists
+                    ? Singleton<GardenManager>.Instance.GardenAreaUnlockController
+                    : null;
+                return controller != null && controller.IsAreaUnlocked(GardenAreaPart.Area5);
             }
         }
 
+        internal static string OwnerNPC(bool isCow1) => isCow1 ? "Farmer_Cotton" : "Young_Tom_Cotton";
+        internal static string UnlockString(bool isCow1) =>
+            isCow1 ? "RELATIONSHIPUNLOCK_CowUnlock_1" : "RELATIONSHIPUNLOCK_CowUnlock_2";
+        private static string Label(bool isCow1) => isCow1 ? "Cow1" : "Cow2";
+
         /// <summary>
         /// Called from InventoryManagerPatch during scene load.
-        /// Subscribes to UnlockManager and evaluates current state.
-        /// Safe to call multiple times (handles scene reloads).
+        /// Subscribes to unlock and date events. Safe to call multiple times (handles scene reloads).
         /// </summary>
         public static void Initialize()
         {
@@ -69,48 +100,25 @@ namespace CottonCowMod
                 CowSpawner.Reset();
                 _cow1Active = false;
                 _cow2Active = false;
-                _firstEvalLogged = false;
+                _saveReady = false;
 
                 // Unsubscribe first to avoid double-subscription on scene reload
-                if (_initialized)
-                {
+                if (_unlockSubscribed)
                     Singleton<UnlockManager>.Instance.UnlockRequest -= OnUnlockRequest;
-                }
                 if (_dateEventSubscribed)
-                {
                     GameEvents<DateChangedEvent>.Ignore(OnDateChanged);
-                    _dateEventSubscribed = false;
-                }
 
-                // Subscribe to unlock events (fires for future unlocks)
                 Singleton<UnlockManager>.Instance.UnlockRequest += OnUnlockRequest;
-                _initialized = true;
-                CottonCowModPlugin.Log.LogInfo("PlayerCows: Subscribed to UnlockManager.");
-
-                // Subscribe to date changes for deferred activation
+                _unlockSubscribed = true;
                 GameEvents<DateChangedEvent>.Listen(OnDateChanged);
                 _dateEventSubscribed = true;
-                CottonCowModPlugin.Log.LogInfo("PlayerCows: Subscribed to DateChangedEvent.");
+                CottonCowModPlugin.Log.LogInfo("PlayerCows: Subscribed to unlock and date events.");
 
                 // Cache the UIPrefab for trough interaction
                 CowTroughManager.CacheUIPrefabIfNeeded();
 
                 // Initialize daily milk production system
                 CowProductionManager.Initialize();
-
-                // Process pending activations immediately on reload
-                // (deferral is only for the initial unlock moment so the cow appears
-                // the next morning — on reload the cow should just spawn right away)
-                if (CottonCowModPlugin.Cow1PendingActivation.Value ||
-                    CottonCowModPlugin.Cow2PendingActivation.Value)
-                {
-                    CottonCowModPlugin.Log.LogInfo(
-                        "PlayerCows: Processing pending activations from previous session.");
-                    ProcessPendingActivations();
-                }
-
-                // Evaluate current state (for previously earned unlocks from save data)
-                EvaluateCowState();
             }
             catch (Exception ex)
             {
@@ -118,17 +126,66 @@ namespace CottonCowMod
             }
         }
 
+        /// <summary>
+        /// Called when the game starts loading a save or a new game (SaveGameLoadPatch).
+        /// </summary>
+        public static void OnLoadStarted()
+        {
+            _saveReady = false;
+        }
+
+        /// <summary>
+        /// Called every frame from the plugin. Detects when the loaded save is ready.
+        /// </summary>
+        public static void Update()
+        {
+            if (_saveReady || !IsWorldReady())
+                return;
+
+            _saveReady = true;
+            CottonCowModPlugin.Log.LogInfo("PlayerCows: Save loaded and player has control.");
+            try
+            {
+                MigrateSaveIfNeeded();
+                EvaluateCowState();
+            }
+            catch (Exception ex)
+            {
+                CottonCowModPlugin.Log.LogError($"PlayerCows: Save-ready evaluation exception: {ex}");
+            }
+        }
+
+        private static bool IsWorldReady()
+        {
+            return Singleton<TotsSystemGameStates>.Instance != null
+                && Singleton<TotsSystemGameStates>.Instance.Current == TotsSystemGameStates.RunningState.InWorld
+                && Player.Instance != null
+                && Singleton<UnlockManager>.Exists
+                && Singleton<GameStateManager>.Instance != null
+                && Singleton<GameStateManager>.Instance.CurrentState is InteractionGameState.DefaultGameState;
+        }
+
         private static void OnUnlockRequest(string unlockString, bool showPrompt)
         {
             // Re-evaluate on any unlock event (could be relationship or garden area)
-            EvaluateCowState();
+            if (_saveReady)
+                EvaluateCowState();
         }
 
         private static void OnDateChanged(DateChangedEvent evt)
         {
+            // The game also raises date events while a save loads; only real mornings count
+            if (!_saveReady)
+                return;
+
             try
             {
-                ProcessPendingActivations();
+                ProcessPendingDeliveries();
+
+                // Re-check unlock conditions each morning. OnUnlockRequest can run before
+                // the game's own handler records the garden unlock, so an unlock missed at
+                // that moment is picked up here (the cow then arrives the following morning).
+                EvaluateCowState();
             }
             catch (Exception ex)
             {
@@ -137,210 +194,212 @@ namespace CottonCowMod
         }
 
         /// <summary>
-        /// Called on each DateChangedEvent. If any cows have pending activation,
-        /// verifies unlock conditions are still met, then spawns them, delivers
-        /// the trough, and sends a mail notification from the gifting NPC only.
-        /// Stale pending flags (e.g. from a previous debug session) are cleared
-        /// without spawning or sending mail.
+        /// Relationship gate. Also accepts a Cotton NPC already at level 13 without the unlock
+        /// string (the string is only added on the transition to 13, which a save can miss),
+        /// and adds the missing string.
         /// </summary>
-        private static void ProcessPendingActivations()
+        private static bool IsRelationshipUnlocked(bool isCow1)
         {
-            bool cow1Pending = CottonCowModPlugin.Cow1PendingActivation.Value;
-            bool cow2Pending = CottonCowModPlugin.Cow2PendingActivation.Value;
+            if (CottonCowModPlugin.DebugForceUnlock != null && CottonCowModPlugin.DebugForceUnlock.Value)
+                return true;
 
-            if (!cow1Pending && !cow2Pending)
-                return;
+            var unlockMgr = Singleton<UnlockManager>.Instance;
+            string unlockString = UnlockString(isCow1);
+            if (unlockMgr.ContainsUnlockString(unlockString))
+                return true;
 
-            // Re-check unlock conditions to guard against stale pending flags
-            var unlockMgr = Singleton<UnlockManager>.Exists
-                ? Singleton<UnlockManager>.Instance : null;
-            bool debugForce = CottonCowModPlugin.DebugForceUnlock != null
-                           && CottonCowModPlugin.DebugForceUnlock.Value;
-            bool gardenOk = IsGardenArea5Unlocked;
-            bool cow1Unlocked = debugForce
-                || (unlockMgr != null && unlockMgr.ContainsUnlockString("RELATIONSHIPUNLOCK_CowUnlock_1"));
-            bool cow2Unlocked = debugForce
-                || (unlockMgr != null && unlockMgr.ContainsUnlockString("RELATIONSHIPUNLOCK_CowUnlock_2"));
-
-            CottonCowModPlugin.Log.LogInfo(
-                $"PlayerCows: Processing pending activations " +
-                $"(Cow1={cow1Pending}[unlock={cow1Unlocked}], Cow2={cow2Pending}[unlock={cow2Unlocked}], Garden={gardenOk}).");
-
-            if (cow1Pending)
+            if (Singleton<RelationshipManager>.Exists &&
+                Singleton<RelationshipManager>.Instance.AllRelationshipData.TryGetValue(OwnerNPC(isCow1), out var data) &&
+                data.CurrentRelationshipLevel >= CowUnlockLevel)
             {
-                CottonCowModPlugin.Cow1PendingActivation.Value = false;
-                if (cow1Unlocked && gardenOk)
-                {
-                    _cow1Active = true;
-                    CowSpawner.SpawnCow("Farmer_Cotton", true);
-                    GiveTroughIfNeeded();
-                    CowMailSender.QueueCowLetter("Farmer_Cotton");
-                    CottonCowModPlugin.Log.LogInfo(
-                        "PlayerCows: Cow1 activated (deferred). Spawned, trough delivered, mail sent.");
-                }
-                else
-                {
-                    CottonCowModPlugin.Log.LogWarning(
-                        "PlayerCows: Cow1 pending flag was stale (unlock conditions not met). Cleared.");
-                }
+                CottonCowModPlugin.Log.LogInfo(
+                    $"PlayerCows: {OwnerNPC(isCow1)} is level {data.CurrentRelationshipLevel} " +
+                    $"without {unlockString}; adding it.");
+                unlockMgr.AddUnlockString(unlockString);
+                return true;
             }
-
-            if (cow2Pending)
-            {
-                CottonCowModPlugin.Cow2PendingActivation.Value = false;
-                if (cow2Unlocked && gardenOk)
-                {
-                    _cow2Active = true;
-                    CowSpawner.SpawnCow("Young_Tom_Cotton", false);
-                    GiveTroughIfNeeded();
-                    CowMailSender.QueueCowLetter("Young_Tom_Cotton");
-                    CottonCowModPlugin.Log.LogInfo(
-                        "PlayerCows: Cow2 activated (deferred). Spawned, trough delivered, mail sent.");
-                }
-                else
-                {
-                    CottonCowModPlugin.Log.LogWarning(
-                        "PlayerCows: Cow2 pending flag was stale (unlock conditions not met). Cleared.");
-                }
-            }
+            return false;
         }
 
         public static void EvaluateCowState()
         {
-            if (!Singleton<UnlockManager>.Exists)
+            if (!_saveReady || !Singleton<UnlockManager>.Exists)
+                return;
+
+            bool garden = IsGardenArea5Unlocked;
+            EvaluateCow(true, garden);
+            EvaluateCow(false, garden);
+        }
+
+        private static void EvaluateCow(bool isCow1, bool garden)
+        {
+            bool relationship = IsRelationshipUnlocked(isCow1);
+            bool eligible = relationship && garden;
+            bool delivered = SaveState.GetBool(SaveState.CowKey(isCow1, "Delivered"));
+            bool pending = SaveState.GetBool(SaveState.CowKey(isCow1, "Pending"));
+            bool active = isCow1 ? _cow1Active : _cow2Active;
+
+            if (eligible && delivered)
+            {
+                if (!active)
+                {
+                    SetActive(isCow1, true);
+                    CottonCowModPlugin.Log.LogInfo($"PlayerCows: {Label(isCow1)} active (delivered earlier).");
+                }
+                CowSpawner.SpawnCow(OwnerNPC(isCow1), isCow1);
+
+                // Repairs saves where the trough couldn't be given (e.g. Storage was full)
+                GiveTroughIfNeeded();
+            }
+            else if (eligible && !pending)
+            {
+                SaveState.SetBool(SaveState.CowKey(isCow1, "Pending"), true);
+                CottonCowModPlugin.Log.LogInfo(
+                    $"PlayerCows: {Label(isCow1)} unlocked for {OwnerNPC(isCow1)}, arriving next morning.");
+            }
+            else if (!eligible && active)
+            {
+                SetActive(isCow1, false);
+                CowSpawner.DespawnCow(isCow1);
+            }
+
+            // "Need more space" letter when the relationship is there but the glade isn't
+            if (relationship && !garden)
+                CowMailSender.QueueNeedSpaceLetter(OwnerNPC(isCow1));
+        }
+
+        /// <summary>
+        /// Called each morning. Delivers cows whose unlock happened since the last morning:
+        /// spawns them, gives the trough, and sends the letter (only ever once per cow).
+        /// </summary>
+        private static void ProcessPendingDeliveries()
+        {
+            bool garden = IsGardenArea5Unlocked;
+            foreach (bool isCow1 in new[] { true, false })
+            {
+                string pendingKey = SaveState.CowKey(isCow1, "Pending");
+                if (!SaveState.GetBool(pendingKey))
+                    continue;
+
+                SaveState.Set(pendingKey, null);
+                if (!(IsRelationshipUnlocked(isCow1) && garden))
+                {
+                    CottonCowModPlugin.Log.LogWarning(
+                        $"PlayerCows: {Label(isCow1)} pending, but unlock conditions are no longer met. Cleared.");
+                    continue;
+                }
+
+                SaveState.SetBool(SaveState.CowKey(isCow1, "Delivered"), true);
+                SetActive(isCow1, true);
+                CowSpawner.SpawnCow(OwnerNPC(isCow1), isCow1);
+                GiveTroughIfNeeded();
+                CowMailSender.QueueCowLetter(OwnerNPC(isCow1));
+                CottonCowModPlugin.Log.LogInfo(
+                    $"PlayerCows: {Label(isCow1)} delivered. Spawned, trough given, letter sent.");
+            }
+        }
+
+        private static void SetActive(bool isCow1, bool active)
+        {
+            if (isCow1)
+                _cow1Active = active;
+            else
+                _cow2Active = active;
+        }
+
+        /// <summary>
+        /// Saves from 1.0.1 and earlier have no per-save state. Cows that had arrived then are
+        /// marked delivered (so they don't arrive again with another letter), and 1.0.1's
+        /// global milk/streak values are copied into the first such save loaded.
+        /// </summary>
+        private static void MigrateSaveIfNeeded()
+        {
+            if (SaveState.Has("Version"))
                 return;
 
             var unlockMgr = Singleton<UnlockManager>.Instance;
-            bool debugForce = CottonCowModPlugin.DebugForceUnlock != null
-                           && CottonCowModPlugin.DebugForceUnlock.Value;
+            bool troughGiven = unlockMgr.ContainsUnlockString(CowTroughManager.TroughGivenUnlockString);
+            bool garden = IsGardenArea5Unlocked;
+            bool migratedLegacy = false;
 
-            _cow1RelationshipUnlocked = debugForce
-                || unlockMgr.ContainsUnlockString("RELATIONSHIPUNLOCK_CowUnlock_1");
-            _cow2RelationshipUnlocked = debugForce
-                || unlockMgr.ContainsUnlockString("RELATIONSHIPUNLOCK_CowUnlock_2");
-            _gardenArea5Unlocked = IsGardenArea5Unlocked;
-
-            bool newCow1 = _cow1RelationshipUnlocked && _gardenArea5Unlocked;
-            bool newCow2 = _cow2RelationshipUnlocked && _gardenArea5Unlocked;
-
-            // Account for pending activations — they count as "will be active"
-            bool cow1Pending = CottonCowModPlugin.Cow1PendingActivation.Value;
-            bool cow2Pending = CottonCowModPlugin.Cow2PendingActivation.Value;
-
-            bool stateChanged = (newCow1 != _cow1Active && !cow1Pending)
-                             || (newCow2 != _cow2Active && !cow2Pending);
-
-            // Only log on first evaluation or state change (avoid spam from unlock replay)
-            if (!_firstEvalLogged || stateChanged)
+            foreach (bool isCow1 in new[] { true, false })
             {
-                string prefix = stateChanged && _firstEvalLogged ? "State changed!" : "Initial state:";
-                CottonCowModPlugin.Log.LogInfo(
-                    $"PlayerCows: {prefix} Cow1={newCow1} Cow2={newCow2} " +
-                    $"(Rel1={_cow1RelationshipUnlocked} Rel2={_cow2RelationshipUnlocked} " +
-                    $"Garden5={_gardenArea5Unlocked})" +
-                    (cow1Pending || cow2Pending ? $" [Pending: C1={cow1Pending} C2={cow2Pending}]" : "") +
-                    (debugForce ? " [DEBUG FORCED]" : ""));
-                _firstEvalLogged = true;
-            }
+                // In 1.0.1 the trough was given when the first cow arrived
+                bool arrived = troughGiven && garden && unlockMgr.ContainsUnlockString(UnlockString(isCow1));
+                if (!arrived)
+                    continue;
 
-            if (stateChanged)
-            {
-                // Handle cow 1 state changes
-                if (newCow1 && !_cow1Active && !cow1Pending)
-                {
-                    OnCowActivated(true, "Farmer_Cotton");
-                }
-                else if (!newCow1 && _cow1Active)
-                {
-                    CowSpawner.DespawnCow(true);
-                }
+                SaveState.SetBool(SaveState.CowKey(isCow1, "Delivered"), true);
+                CottonCowModPlugin.Log.LogInfo($"PlayerCows: Migrated {Label(isCow1)} as already delivered.");
 
-                // Handle cow 2 state changes
-                if (newCow2 && !_cow2Active && !cow2Pending)
+                if (LegacyConfig.HasPendingState)
                 {
-                    OnCowActivated(false, "Young_Tom_Cotton");
-                }
-                else if (!newCow2 && _cow2Active)
-                {
-                    CowSpawner.DespawnCow(false);
+                    string label = Label(isCow1);
+                    SaveState.SetBool(SaveState.CowKey(isCow1, "HasMilk"), LegacyConfig.GetBool(label + "HasMilk"));
+                    SaveState.SetInt(SaveState.CowKey(isCow1, "MilkQuality"), LegacyConfig.GetInt(label + "MilkQuality"));
+                    SaveState.SetFloat(SaveState.CowKey(isCow1, "Streak"), LegacyConfig.GetFloat(label + "Streak"));
+                    migratedLegacy = true;
                 }
             }
 
-            // Send "need more space" letters when relationship is unlocked but garden isn't
-            if (_cow1RelationshipUnlocked && !_gardenArea5Unlocked)
-                CowMailSender.QueueNeedSpaceLetter("Farmer_Cotton");
-            if (_cow2RelationshipUnlocked && !_gardenArea5Unlocked)
-                CowMailSender.QueueNeedSpaceLetter("Young_Tom_Cotton");
+            if (migratedLegacy)
+                LegacyConfig.MarkMigrated();
 
-            _cow1Active = newCow1;
-            _cow2Active = newCow2;
-
-            // Re-read pending state — OnCowActivated may have set new pending flags
-            // above, so the local cow1Pending/cow2Pending variables are now stale
-            bool cow1NowPending = CottonCowModPlugin.Cow1PendingActivation.Value;
-            bool cow2NowPending = CottonCowModPlugin.Cow2PendingActivation.Value;
-
-            // Ensure cows are spawned on scene load if conditions are already met
-            // (but NOT if they're pending — those wait for the next morning)
-            if (_cow1Active && !CowSpawner.Cow1Spawned && !cow1NowPending)
-            {
-                CowSpawner.SpawnCow("Farmer_Cotton", true);
-            }
-            if (_cow2Active && !CowSpawner.Cow2Spawned && !cow2NowPending)
-            {
-                CowSpawner.SpawnCow("Young_Tom_Cotton", false);
-            }
+            SaveState.SetInt("Version", 1);
         }
 
         /// <summary>
-        /// Called when a cow first becomes active (unlock conditions met).
-        /// Instead of spawning immediately, sets a pending activation flag.
-        /// The cow will actually spawn on the next DateChangedEvent (next morning).
-        /// </summary>
-        private static void OnCowActivated(bool isCow1, string ownerNPC)
-        {
-            CottonCowModPlugin.Log.LogInfo(
-                $"PlayerCows: {(isCow1 ? "Cow1" : "Cow2")} activation deferred for {ownerNPC} " +
-                "(will spawn next morning).");
-
-            if (isCow1)
-                CottonCowModPlugin.Cow1PendingActivation.Value = true;
-            else
-                CottonCowModPlugin.Cow2PendingActivation.Value = true;
-        }
-
-        /// <summary>
-        /// Gives the player a CowFeedingTrough by adding it to the Storage inventory.
-        /// The trough has the gardening trait, so it appears in the Garden tab in decoration mode.
-        /// Tracked via a persistent unlock string so it survives save/load.
+        /// Gives the player a CowFeedingTrough by adding it to the Storage inventory
+        /// (or the mailbox if Storage is full). The trough has the gardening trait,
+        /// so it appears in the Garden tab in decoration mode.
+        /// Tracked via a persistent unlock string, set only once the trough was actually added.
+        ///
+        /// Also replaces a trough that has gone missing: saving without the mod installed drops
+        /// the trough (the game doesn't know the item), so after a reinstall the player would
+        /// have cows and no way to feed them.
         /// </summary>
         private static void GiveTroughIfNeeded()
         {
             try
             {
                 var unlockMgr = Singleton<UnlockManager>.Instance;
-                if (unlockMgr.ContainsUnlockString(CowTroughManager.TroughGivenUnlockString))
-                {
-                    CottonCowModPlugin.Log.LogInfo("PlayerCows: CowFeedingTrough already given.");
-                    return;
-                }
-
                 var troughType = CowTroughManager.CowTroughItemType;
+                bool given = unlockMgr.ContainsUnlockString(CowTroughManager.TroughGivenUnlockString);
+
                 if (troughType == null)
                 {
-                    CottonCowModPlugin.Log.LogWarning(
-                        "PlayerCows: CowFeedingTrough ItemType not available! " +
-                        "ItemManagerPatch may not have run yet.");
+                    if (!given)
+                        CottonCowModPlugin.Log.LogWarning(
+                            "PlayerCows: CowFeedingTrough ItemType not available! " +
+                            "ItemManagerPatch may not have run yet.");
                     return;
                 }
 
+                // ItemManager knows every item in the save: in any inventory or placed in the world
+                if (given)
+                {
+                    if (Singleton<ItemManager>.Instance.GetItem(item => item.ItemType == troughType) != null)
+                        return;
+                    CottonCowModPlugin.Log.LogInfo(
+                        "PlayerCows: CowFeedingTrough is missing (was the mod uninstalled?), giving a new one.");
+                }
+
+                var inventories = Singleton<InventoryManager>.Instance;
                 var item = Singleton<ItemManager>.Instance.CreateItem(troughType);
-                var storage = Singleton<InventoryManager>.Instance.Storage;
-                storage.Add(item, true);
+                string destination;
+                if (inventories.Storage.Add(item, true))
+                    destination = "Storage (Garden tab)";
+                else if (inventories.Mailbox.Add(item))
+                    destination = "mailbox (Storage was full)";
+                else
+                {
+                    CottonCowModPlugin.Log.LogWarning(
+                        "PlayerCows: Storage and mailbox are full, will retry giving the trough tomorrow.");
+                    return;
+                }
 
                 unlockMgr.AddUnlockString(CowTroughManager.TroughGivenUnlockString);
-                CottonCowModPlugin.Log.LogInfo(
-                    "PlayerCows: CowFeedingTrough added to Storage (Garden tab).");
+                CottonCowModPlugin.Log.LogInfo($"PlayerCows: CowFeedingTrough added to {destination}.");
             }
             catch (Exception ex)
             {

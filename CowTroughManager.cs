@@ -19,9 +19,19 @@ namespace CottonCowMod
         /// <summary>
         /// When true, the next StorageUIScreen.Init() call should use "CowTrough"
         /// instead of whatever inventory name is baked into the prefab.
-        /// Set by CowTroughInteraction, cleared by StorageUIScreenPatch.
+        /// Set by CowTroughInteraction, cleared by StorageUIScreenPatch. Expires after a few
+        /// seconds, so if opening is interrupted the next pantry or chest isn't mistaken
+        /// for the cow trough.
         /// </summary>
-        public static bool IsOpeningCowTrough;
+        public static bool IsOpeningCowTrough
+        {
+            get => _openingCowTroughSince >= 0f &&
+                   Time.realtimeSinceStartup - _openingCowTroughSince < OpeningTimeoutSeconds;
+            set => _openingCowTroughSince = value ? Time.realtimeSinceStartup : -1f;
+        }
+
+        private const float OpeningTimeoutSeconds = 5f;
+        private static float _openingCowTroughSince = -1f;
 
         /// <summary>
         /// Cached reference to the StorageUIScreen prefab (obtained from an existing
@@ -58,9 +68,22 @@ namespace CottonCowMod
             if (CachedUIPrefab != null)
                 return;
 
+            // Active storages first (a loaded chicken trough). If none is streamed in, e.g. the
+            // player has no chickens, also look at inactive storages and loaded prefabs; the UI
+            // prefab is the same shared asset either way. PhysicalStoragePatch also caches it
+            // whenever any storage becomes active later.
+            if (!TryCacheFrom(Object.FindObjectsOfType<TotS.PhysicalStorage>()) &&
+                !TryCacheFrom(Resources.FindObjectsOfTypeAll<TotS.PhysicalStorage>()))
+            {
+                CottonCowModPlugin.Log.LogWarning(
+                    "CowTroughManager: No PhysicalStorage found to cache UIPrefab yet.");
+            }
+        }
+
+        private static bool TryCacheFrom(TotS.PhysicalStorage[] allStorages)
+        {
             TotS.PhysicalStorage fallback = null;
 
-            var allStorages = Object.FindObjectsOfType<TotS.PhysicalStorage>();
             foreach (var storage in allStorages)
             {
                 if (storage.UIPrefab == null)
@@ -78,7 +101,7 @@ namespace CottonCowMod
                         CachedUIPrefab = storage.UIPrefab;
                         CottonCowModPlugin.Log.LogInfo(
                             $"CowTroughManager: Cached UIPrefab from chicken trough ({storage.gameObject.name}).");
-                        return;
+                        return true;
                     }
                 }
 
@@ -87,17 +110,25 @@ namespace CottonCowMod
             }
 
             // Fall back to any PhysicalStorage if chicken trough wasn't found
-            if (fallback != null)
-            {
-                CachedUIPrefab = fallback.UIPrefab;
-                CottonCowModPlugin.Log.LogInfo(
-                    $"CowTroughManager: Chicken trough not found, cached UIPrefab from {fallback.gameObject.name}.");
-            }
-            else
-            {
-                CottonCowModPlugin.Log.LogWarning(
-                    "CowTroughManager: No PhysicalStorage found in scene to cache UIPrefab.");
-            }
+            if (fallback == null)
+                return false;
+
+            CachedUIPrefab = fallback.UIPrefab;
+            CottonCowModPlugin.Log.LogInfo(
+                $"CowTroughManager: Chicken trough not found, cached UIPrefab from {fallback.gameObject.name}.");
+            return true;
+        }
+
+        /// <summary>
+        /// Caches the UI prefab from a storage that just became active, if we have none yet.
+        /// </summary>
+        public static void CacheFrom(TotS.PhysicalStorage storage)
+        {
+            if (CachedUIPrefab != null || storage == null || storage.UIPrefab == null)
+                return;
+            CachedUIPrefab = storage.UIPrefab;
+            CottonCowModPlugin.Log.LogInfo(
+                $"CowTroughManager: Cached UIPrefab from {storage.gameObject.name} when it loaded.");
         }
     }
 }
