@@ -7,8 +7,8 @@ using TotS;
 using TotS.DateTime;
 using TotS.DateTime.Weather;
 using UnityEngine;
-using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.Utilities;
+
+
 
 namespace CottonCowMod.Testing
 {
@@ -18,8 +18,8 @@ namespace CottonCowMod.Testing
     /// window resolution with the HUD hidden. Several camera angles are taken per shot so the
     /// best can be picked by eye.
     ///
-    /// Uses the game's DebugFreeCamera, given an input set with no devices so it holds the
-    /// pose we set, instead of needing a second gamepad.
+    /// Uses its own virtual camera (PhotoCamera) registered with the game's CameraManager,
+    /// which takes over from the player camera and holds the pose we set.
     /// </summary>
     internal static class PhotoSuite
     {
@@ -54,7 +54,7 @@ namespace CottonCowMod.Testing
             }
             Singleton<DateTimeManager>.Instance.SetWeatherConditionOverride(WeatherCondition.Dry);
 
-            if (!t.Check("free camera available", EnableFreeCamera()))
+            if (!t.Check("photo camera registered", EnableFreeCamera()))
                 yield break;
             yield return new WaitForSeconds(1f);
 
@@ -207,42 +207,65 @@ namespace CottonCowMod.Testing
                 updateWeatherCondition: false, fireDateTimeChanged: false);
         }
 
+        private static PhotoCamera _camera;
+
         private static bool EnableFreeCamera()
         {
-            var cam = Singleton<DebugFreeCamera>.Instance;
-            if (cam == null)
+            if (CameraManager.Instance == null || CameraManager.Instance.MainCamera == null)
                 return false;
-
-            var t = Traverse.Create(cam);
-            if (t.Field("m_Actions").GetValue() == null)
-            {
-                var actions = new InputActions();
-                actions.asset.devices = new ReadOnlyArray<InputDevice>(new InputDevice[0]);
-                t.Field("m_Actions").SetValue(actions);
-            }
-            ((InputActions)t.Field("m_Actions").GetValue()).Enable();
-            t.Field("m_IsActive").SetValue(true);
-            CameraManager.Instance.AddCamera(cam);
-            var camera = t.Field("m_Camera").GetValue<Camera>();
-            if (camera != null)
-                camera.cullingMask = CameraManager.Instance.MainCamera.cullingMask;
+            _camera = new PhotoCamera(CameraManager.Instance.MainCamera);
+            CameraManager.Instance.AddCamera(_camera);
             return true;
         }
 
         private static void DisableFreeCamera()
         {
-            Singleton<DebugFreeCamera>.Instance?.DisableCamera();
+            if (_camera != null)
+                CameraManager.Instance.RemoveCamera(_camera);
+            _camera = null;
         }
 
         private static void PoseCamera(Vector3 position, Vector3 lookAt)
         {
-            var cam = Singleton<DebugFreeCamera>.Instance;
             Vector3 dir = lookAt - position;
             float yaw = Mathf.Atan2(dir.x, dir.z) * RadToDeg;
             float pitch = -Mathf.Asin(dir.y / dir.magnitude) * RadToDeg;
-            Traverse.Create(cam).Field("m_AxisRot").SetValue(new Vector2(pitch, yaw));
-            cam.Transform.position = position;
-            cam.Transform.rotation = Quaternion.AngleAxis(yaw, Vector3.up) * Quaternion.AngleAxis(pitch, Vector3.right);
+            _camera.Position = position;
+            _camera.Rotation = Quaternion.AngleAxis(yaw, Vector3.up) * Quaternion.AngleAxis(pitch, Vector3.right);
+            _camera.FocusDistance = dir.magnitude;
+        }
+
+        /// <summary>
+        /// A virtual camera for the game's CameraManager that holds whatever pose we give it.
+        /// Registered with the highest priority, it takes over from the player camera, cutting
+        /// in instantly. (The game's DebugFreeCamera isn't in release builds.)
+        /// </summary>
+        private class PhotoCamera : IVirtualCamera
+        {
+            public PhotoCamera(Camera reference)
+            {
+                Position = reference.transform.position;
+                Rotation = reference.transform.rotation;
+                FocusDistance = reference.focusDistance;
+                FocalLength = reference.focalLength;
+                Aperture = reference.aperture;
+            }
+
+            public string Name => "CottonCowPhotoCamera";
+            public bool IsActive => true;
+            public int Priority => int.MaxValue;
+            public CameraTransitionInfo Transition { get; } = new CameraTransitionInfo(true, true, 0f, false);
+            public Vector3 Position { get; set; }
+            public Quaternion Rotation { get; set; }
+            public float FieldOfView => 40f;
+            public float NearClipPlane => 0.1f;
+            public float FocusDistance { get; set; }
+            public float FocalLength { get; }
+            public float Aperture { get; }
+
+            public void Activate(CameraManager.PreviousCameraInfo previousCamera) { }
+            public void Deactivate() { }
+            public void CameraUpdate(bool cut) { }
         }
     }
 }
