@@ -4,12 +4,16 @@ Hullo, hobbits! 1.0.2 is out, and it's a big bug-fix update. Thank you to everyo
 
 **If you've had any trouble with the cows, please update.** You don't need to start a new game, move your decorations, or do anything special: install 1.0.2 and load your save.
 
+![Two cows walking up to say hello in the glade](https://staticdelivery.nexusmods.com/mods/8013/images/5/5-1792431969-286774484.png)
+
 ## What was wrong, and what changed
 
 ### "My cows won't go into the glade"
 The cows were always meant to live in the glade (the last garden expansion). In 1.0.1 they spawned near the chicken coop in the front yard instead, with a small roaming area around it. That's why cows were wandering into doors, walls, garden beds and the house, and why widening their roaming range sent them off into the village.
 
 **Now:** the mod works out the shape of your glade, and the cows spawn in the middle of it and only wander inside it. A hungry cow that follows you waits at the edge of the glade instead of trailing you to your front door, and if a cow gets pushed out, she walks back in.
+
+![Two cows grazing in the glade](https://staticdelivery.nexusmods.com/mods/8013/images/5/5-1792431955-1852508898.png)
 
 ### "I got the 'you need more room' letter, but I have every garden expansion"
 The game can record the last garden expansion in two different ways, and 1.0.1 only checked for one of them. On some saves it never noticed the glade was unlocked. Clearing land or moving decorations wouldn't have helped.
@@ -20,6 +24,8 @@ The game can record the last garden expansion in two different ways, and 1.0.1 o
 Two things could cause this. The trough borrowed its menu from another storage object (like the chicken trough), so if nothing like that was loaded nearby, it simply wouldn't open. Separately, the game has its own Metal Feeding Trough that looks just like ours.
 
 **Now:** the Cow Feeding Trough always opens, and keeps working after you use decoration mode. The letters now name the **Cow Feeding Trough**, so you know which one to place (it's in your Garden Storage). If your Storage is full when the cows arrive, the trough goes to your mailbox instead of being lost.
+
+![The Cow Feeding Trough filled with apples, carrots, cabbage and pumpkin](https://staticdelivery.nexusmods.com/mods/8013/images/5/5-1792431961-1850308582.png)
 
 ### "I uninstalled the mod and the Cottons' shops are empty"
 This was the worst one, and I'm sorry to everyone it caught. The mod raises the Cottons' friendship cap to 13, and 1.0.1 saved that into your save file. The base game has no shop stock above level 10, so without the mod Farmer Cotton and Young Tom had nothing to sell.
@@ -55,5 +61,7 @@ None of the testing code is in the version you download.
 
 ## Thank you
 Thanks again for the reports, the patience, and the kind words. Several of you said you'd uninstalled while waiting for a fix. I hope 1.0.2 tempts you back to the glade. 🐄
+
+![A hobbit greeting her cow in the glade](https://staticdelivery.nexusmods.com/mods/8013/images/5/5-1792431966-1973349726.png)
 
 If you run into anything, use **Create Bug Report** and paste the report into a comment or bug report.

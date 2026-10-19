@@ -33,8 +33,8 @@
 - Saves backed up in `TOTS/SaveBackups/`; test saves in `TOTS/TestFixtures/`.
 
 ### Other
-- Unreleased v1.1.0 (butter churn) lives in `C:\Users\carin\OneDrive\Desktop\CottonCowMod`, branch
-  `wip/1.1.0-butter-churn` (local only). It needs the 1.0.2 changes merged in before release.
+- Unreleased 1.1.0 work is in a separate local copy (not in this repo). It needs the 1.0.2
+  changes merged in before release.
 - Release docs (README_NEXUS.md, INSTALL_GUIDE.md) are now in `release/`.
 - Not done (low priority): localization of letters/trough text/rejection text; CowDiet is a fixed
   list (modded vegetables excluded); CowTrough inventory is created in every save even before unlock.
